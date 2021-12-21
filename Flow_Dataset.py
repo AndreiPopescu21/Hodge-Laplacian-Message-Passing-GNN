@@ -192,7 +192,7 @@ def generate_trajectory(start_rect, end_rect, ckpt_rect, G: nx.Graph):
 def generate_random_trajectories(G: nx.Graph, num_train = 1000, num_test = 1000):
     start_rect = np.array([[0.0, 0.4], [0.1, 0.6]])
     end_rect = np.array([[0.1, 0.4], [0.2, 0.6]])
-    bot_rect = np.array([[0.9, 0.1], [1.0, 0.3]])
+    bot_rect = np.array([[0.9, 0.1], [1.0, 0.2]])
     top_rect = np.array([[0.9, 0.9], [1.0, 1.0]])
     mid_rect = [bot_rect, top_rect]
     
@@ -239,12 +239,37 @@ def load_flow_dataset(num_points=1000, num_train=1000, num_test=1000):
 class Flow_Dataset(DGLDataset):
     def __init__(self):
         super().__init__(name='flow')
-    
+
     def process(self):
         self.G, self.zero_eigenvector, self.trajectories, self.labels = load_flow_dataset()
 
+        self.graphs = []
+        self.graph_info = []
+
+        for trajectory in self.trajectories:
+            num_nodes = len(self.G.graph["points"])
+            src = np.array([nodes[0] for nodes in self.G.graph["tuple_to_edge"]])
+            dst = np.array([nodes[1] for nodes in self.G.graph["tuple_to_edge"]])
+
+            node_features = np.array([[1] if i in trajectory else [0] for i in range(num_nodes)])
+            node_features = torch.from_numpy(node_features)
+            edge_features = np.array(self.zero_eigenvector)
+            edge_features = torch.from_numpy(edge_features)
+
+            g = dgl.graph((src, dst), num_nodes=num_nodes)
+            g.ndata["node_features"] = node_features
+            g.edata["edge_features"] = edge_features
+
+            g_info = {}
+            g_info["trajectory"] = trajectory
+
+            self.graphs.append(g)
+            self.graph_info.append(g_info)
+
+        self.labels = torch.LongTensor(self.labels)
+
     def __getitem__(self, i):
-        return self.G, self.zero_eigenvector, self.trajectories[i], self.labels[i]
+        return self.graphs[i], self.labels[i], self.graph_info[i]
 
     def __len__(self):
         return len(self.trajectories)
@@ -252,8 +277,3 @@ class Flow_Dataset(DGLDataset):
 if __name__ == "__main__":
     dataset = Flow_Dataset()
     print(dataset[0])
-# print(len(dataset))
-
-# Edge structure
-# Double check format of the data
-# Plotting

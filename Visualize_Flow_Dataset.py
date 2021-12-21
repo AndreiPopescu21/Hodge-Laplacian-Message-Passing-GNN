@@ -32,12 +32,14 @@ def visualise_trajectories():
     upper_trajectory, lower_trajectory = None, None
 
     for i, data in enumerate(dataset):
+        graph, label, graph_info = data
+        
         if upper_trajectory and lower_trajectory:
             break
-        elif data[3] == 1:
-            upper_trajectory = data[2]
+        elif label.item() == 1:
+            upper_trajectory = graph_info['trajectory']
         else:
-            lower_trajectory = data[2]
+            lower_trajectory = graph_info['trajectory']
     
     for i in range(1, len(upper_trajectory)):
         color='red'
@@ -63,18 +65,21 @@ def visualize_eigenvector():
     edge_to_tuple = G.graph['edge_to_tuple']
     triangles = G.graph['triangles']
     points = G.graph['points']
-    eigenvector = dataset[0][1]
-    max_value = max(eigenvector)
-    min_value = min(eigenvector)
+    
+    graph, _, _ = dataset[0]
+    eigenvector = graph.edata['edge_features']
+    max_value = max(eigenvector).item()
+    min_value = min(eigenvector).item()
 
     plt.figure(figsize=(10, 8))
     plt.triplot(points[:, 0], points[:, 1], triangles)
     plt.plot(points[:, 0], points[:, 1], 'o')
 
-    for i, value in enumerate(eigenvector):
+    for i, _ in enumerate(G.graph['tuple_to_edge']):
         nodes1 = edge_to_tuple[i]
         p1, p2 = points[nodes1[0]], points[nodes1[1]]
 
+        value = eigenvector[i].item()
         mapped_value = (value - min_value) / (max_value - min_value) * 255
         color = get_color_scale(mapped_value)
 
