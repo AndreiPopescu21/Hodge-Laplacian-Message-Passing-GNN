@@ -1,0 +1,259 @@
+import dgl
+from dgl.data import DGLDataset
+import torch
+from scipy.spatial import Delaunay
+from scipy.linalg import null_space
+
+import random
+import numpy as np
+import networkx as nx
+import itertools
+
+
+def is_inside_rectangle(x, rect):
+    return rect[0, 0] <= x[0] <= rect[1, 0] and rect[0, 1] <= x[1] <= rect[1, 1]
+
+def sample_point_from_rect(points, rect):
+    samples = []
+    for i in range(len(points)):
+        if is_inside_rectangle(points[i], rect):
+            samples.append(i)
+
+    return random.choice(samples)
+
+def create_hole(points, triangles, hole):
+    kept_triangles = []
+    removed_vertices = set()
+
+    # Find the points and triangles to remove
+    for i in range(len(triangles)):
+        simplex = triangles[i]
+        assert len(simplex) == 3
+        xs = points[simplex]
+
+        remove_triangle = False
+        for j in range(3):
+            vertex = simplex[j]
+            if is_inside_rectangle(xs[j], hole):
+                remove_triangle = True
+                removed_vertices.add(vertex)
+
+        if not remove_triangle:
+            kept_triangles.append(i)
+
+    # Remove the triangles and points inside the holes
+    triangles = triangles[np.array(kept_triangles)]
+
+    # Remove the points that are not part of any triangles anymore.
+    # This can happen in some very rare cases
+    for i in range(len(points)):
+        if np.sum(triangles == i) == 0:
+            removed_vertices.add(i)
+
+    points = np.delete(points, list(removed_vertices), axis=0)
+
+    # Renumber the indices of the triangles' vertices
+    for vertex in sorted(removed_vertices, reverse=True):
+        triangles[triangles >= vertex] -= 1
+
+    return points, triangles
+
+def create_graph_from_triangulation(points, triangles):
+    # Create a graph from from this containing only the non-removed triangles
+    G = nx.Graph()
+    edge_idx = 0
+    edge_to_tuple = {}
+    tuple_to_edge = {}
+
+    for i in range(len(triangles)):
+        vertices = triangles[i]
+        for j in range(3):
+            if vertices[j] not in G:
+                G.add_node(vertices[j], point=points[vertices[j]])
+
+            for v1, v2 in itertools.combinations(vertices, 2):
+                if not G.has_edge(v1, v2):
+                    G.add_edge(v1, v2, index=edge_idx)
+                    edge_to_tuple[edge_idx] = (min(v1, v2), max(v1, v2))
+                    tuple_to_edge[(min(v1, v2), max(v1, v2))] = edge_idx
+                    edge_idx += 1
+                assert G.has_edge(v2, v1)
+
+    G.graph['edge_to_tuple'] = edge_to_tuple
+    G.graph['tuple_to_edge'] = tuple_to_edge
+    G.graph['points'] = points
+    G.graph['triangles'] = triangles
+    return G
+
+def extract_boundary_matrices(G: nx.Graph):
+    """Compute the boundary and co-boundary matrices for the edges of the complex. """
+    edge_to_tuple = G.graph['edge_to_tuple']
+    tuple_to_edge = G.graph['tuple_to_edge']
+    triangles = G.graph['triangles']
+
+    B1 = np.zeros((G.number_of_nodes(), G.number_of_edges()), dtype=float)
+    for edge_id in range(G.number_of_edges()):
+        nodes = edge_to_tuple[edge_id]
+        min_node = min(nodes)
+        max_node = max(nodes)
+        B1[min_node, edge_id] = -1
+        B1[max_node, edge_id] = 1
+
+    assert np.all(np.sum(np.abs(B1), axis=-1) > 0)
+    assert np.all(np.sum(np.abs(B1), axis=0) == 2)
+    assert np.all(np.sum(B1, axis=0) == 0)
+
+    def extract_edge_and_orientation(triangle, i):
+        assert i <= 2
+        n1 = triangle[i]
+        if i < 2:
+            n2 = triangle[i + 1]
+        else:
+            n2 = triangle[0]
+
+        if n1 < n2:
+            orientation = 1
+        else:
+            orientation = -1
+
+        return tuple_to_edge[(min(n1, n2), max(n1, n2))], orientation
+
+    B2 = np.zeros((G.number_of_edges(), len(triangles)), dtype=float)
+    for i in range(len(triangles)):
+        edge1, orientation1 = extract_edge_and_orientation(triangles[i], 0)
+        edge2, orientation2 = extract_edge_and_orientation(triangles[i], 1)
+        edge3, orientation3 = extract_edge_and_orientation(triangles[i], 2)
+        assert edge1 != edge2 and edge1 != edge3 and edge2 != edge3
+
+        B2[edge1, i] = orientation1
+        B2[edge2, i] = orientation2
+        B2[edge3, i] = orientation3
+
+    assert np.all(np.sum(np.abs(B2), axis=0) == 3)
+    assert np.all(np.sum(np.abs(B2), axis=-1) > 0)
+    return B1, B2
+
+def get_hodge_laplacian(B1, B2):
+    return np.dot(B1.T, B1) + np.dot(B2, B2.T)
+
+def get_zero_eigenvector(G, L1):
+    zero_eigen_components = null_space(L1)
+    assert len(zero_eigen_components[0]) == 1
+    zero_eigenvector = np.array([abs(i[0]) for i in zero_eigen_components])
+    assert len(zero_eigenvector) == len(G.graph['edge_to_tuple'])
+    return zero_eigenvector
+
+def generate_trajectory(start_rect, end_rect, ckpt_rect, G: nx.Graph):
+    points = G.graph['points']
+    tuple_to_edge = G.graph['tuple_to_edge']
+
+    start_vertex = sample_point_from_rect(points, start_rect)
+    end_vertex = sample_point_from_rect(points, end_rect)
+    ckpt_vertex = sample_point_from_rect(points, ckpt_rect)
+
+    vertex = start_vertex
+    end_point = points[end_vertex]
+    ckpt_point = points[ckpt_vertex]
+
+    path = [vertex]
+    explored = set()
+
+    ckpt_reached = False
+
+    while vertex != end_vertex:
+        explored.add(vertex)
+        if vertex == ckpt_vertex:
+            ckpt_reached = True
+
+        nv = np.array([nghb for nghb in G.neighbors(vertex)
+                       if nghb not in explored])
+        if len(nv) == 0:
+            # If we get stuck because everything around was explored
+            # Then just try to generate another trajectory.
+            return generate_trajectory(start_rect, end_rect, ckpt_rect, G)
+        npoints = points[nv]
+
+        if ckpt_reached:
+            dist = np.sum((npoints - end_point[None, :]) ** 2, axis=-1)
+        else:
+            dist = np.sum((npoints - ckpt_point[None, :]) ** 2, axis=-1)
+
+        coin_toss = np.random.uniform()
+
+        if coin_toss < 0.1:
+            vertex = nv[np.random.choice(len(dist))]
+        else:
+            vertex = nv[np.argmin(dist)]
+
+        path.append(vertex)
+
+    return path
+
+def generate_random_trajectories(G: nx.Graph, num_train = 1000, num_test = 1000):
+    start_rect = np.array([[0.0, 0.4], [0.1, 0.6]])
+    end_rect = np.array([[0.1, 0.4], [0.2, 0.6]])
+    bot_rect = np.array([[0.9, 0.1], [1.0, 0.3]])
+    top_rect = np.array([[0.9, 0.9], [1.0, 1.0]])
+    mid_rect = [bot_rect, top_rect]
+    
+    trajectories, labels = [], []
+    
+    for i in range(num_test + num_train):
+        rand = random.randint(0, 1)
+        
+        trajectories.append(generate_trajectory(start_rect, mid_rect[rand], end_rect, G))
+        labels.append(rand)
+            
+    return trajectories, labels
+
+def load_flow_dataset(num_points=1000, num_train=1000, num_test=1000):
+    points = np.random.uniform(low=-0.05, high=1.05, size=(num_points, 2))
+    triangulation = Delaunay(points)
+
+    # Make sure that each point appears in some triangle.
+    for i in range(len(points)):
+        assert np.sum(triangulation.simplices == i) > 0
+
+    hole = np.array([[0.4, 0.4], [0.6, 0.6]])
+    points, triangles = create_hole(points, triangulation.simplices, hole)
+
+    # Make sure that each point appears in some triangle.
+    for i in range(len(points)):
+        assert np.sum(triangles == i) > 0
+
+    assert np.min(triangles) == 0
+    assert np.max(triangles) == len(points) - 1
+    
+    G = create_graph_from_triangulation(points, triangles)
+    assert G.number_of_nodes() == len(points)
+    
+    A = nx.adjacency_matrix(G).todense()
+    B1, B2 = extract_boundary_matrices(G)
+    L1 = get_hodge_laplacian(B1, B2)
+    
+    zero_eigenvector = get_zero_eigenvector(G, L1)
+    trajectories, labels = generate_random_trajectories(G)
+
+    return G, zero_eigenvector, trajectories, labels
+
+class Flow_Dataset(DGLDataset):
+    def __init__(self):
+        super().__init__(name='flow')
+    
+    def process(self):
+        self.G, self.zero_eigenvector, self.trajectories, self.labels = load_flow_dataset()
+
+    def __getitem__(self, i):
+        return self.G, self.zero_eigenvector, self.trajectories[i], self.labels[i]
+
+    def __len__(self):
+        return len(self.trajectories)
+
+if __name__ == "__main__":
+    dataset = Flow_Dataset()
+    print(dataset[0])
+# print(len(dataset))
+
+# Edge structure
+# Double check format of the data
+# Plotting
