@@ -263,6 +263,8 @@ class Flow_Dataset(DGLDataset):
             g_info = {}
             g_info["trajectory"] = trajectory
 
+            g = dgl.add_self_loop(g)
+
             self.graphs.append(g)
             self.graph_info.append(g_info)
 
@@ -272,8 +274,4 @@ class Flow_Dataset(DGLDataset):
         return self.graphs[i], self.labels[i], self.graph_info[i]
 
     def __len__(self):
-        return len(self.trajectories)
-
-if __name__ == "__main__":
-    dataset = Flow_Dataset()
-    print(dataset[0])
+        return len(self.graphs)
