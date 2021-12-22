@@ -32,20 +32,24 @@ class GCN(nn.Module):
     def __init__(self):
         super(GCN, self).__init__()
         self.conv1 = GraphConv(1, 1024)
-        self.conv2 = GraphConv(1024, 512)
-        self.conv3 = GraphConv(512, 512)
-        self.fn1 = nn.Linear(512, 256)
-        self.fn2 = nn.Linear(256, 2)
+        self.conv2 = GraphConv(1024, 1024)
+        self.conv3 = GraphConv(1024, 512)
+        self.conv4 = GraphConv(512, 512)
+        self.fn1 = nn.Linear(512, 512)
+        self.fn2 = nn.Linear(512, 256)
+        self.fn3 = nn.Linear(256, 2)
 
     def forward(self, g, h):
         h = F.relu(self.conv1(g, h))
         h = F.relu(self.conv2(g, h))
         h = F.relu(self.conv3(g, h))
+        h = F.relu(self.conv4(g, h))
         with g.local_scope():
             g.ndata['h'] = h
             hg = dgl.mean_nodes(g, 'h')
             gh = F.relu(self.fn1(hg))
-            return F.log_softmax(self.fn2(gh), dim=0)
+            gh = F.relu(self.fn2(gh))
+            return F.log_softmax(self.fn3(gh), dim=0)
 
 def train_model(model, train_dataloader, num_epochs = 5):
     param = torch.optim.Adam(model.parameters())
@@ -76,7 +80,7 @@ if __name__ == "__main__":
     train_dataloader, test_dataloader = get_samples(dataset, 0.8, 16)
 
     model = GCN()
-    model = train_model(model, train_dataloader)
+    model = train_model(model, train_dataloader, 10)
 
     acc = evaluate_model(model, test_dataloader)
     print('Test accuracy:', acc)

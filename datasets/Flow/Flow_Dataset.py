@@ -191,9 +191,9 @@ def generate_trajectory(start_rect, end_rect, ckpt_rect, G: nx.Graph):
 
 def generate_random_trajectories(G: nx.Graph, num_train = 1000, num_test = 1000):
     start_rect = np.array([[0.0, 0.4], [0.1, 0.6]])
-    end_rect = np.array([[0.1, 0.4], [0.2, 0.6]])
-    bot_rect = np.array([[0.9, 0.1], [1.0, 0.2]])
-    top_rect = np.array([[0.9, 0.9], [1.0, 1.0]])
+    end_rect = np.array([[0.8, 0.4], [1.0, 0.6]])
+    bot_rect = np.array([[0.4, 0.0], [0.6, 0.2]])
+    top_rect = np.array([[0.4, 0.8], [0.6, 1.0]])
     mid_rect = [bot_rect, top_rect]
     
     trajectories, labels = [], []
@@ -201,7 +201,7 @@ def generate_random_trajectories(G: nx.Graph, num_train = 1000, num_test = 1000)
     for i in range(num_test + num_train):
         rand = random.randint(0, 1)
         
-        trajectories.append(generate_trajectory(start_rect, mid_rect[rand], end_rect, G))
+        trajectories.append(generate_trajectory(start_rect, end_rect, mid_rect[rand], G))
         labels.append(rand)
             
     return trajectories, labels

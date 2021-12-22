@@ -57,6 +57,7 @@ def visualise_trajectories():
         plt.arrow(p1[0], p1[1], p2[0] - p1[0], p2[1] - p1[1], color=color,
             shape='full', lw=3, length_includes_head=True, head_width=.01, zorder=10)
 
+    plt.savefig("flow_trajectories.png")
     plt.show()
 
 def visualize_eigenvector():
@@ -86,6 +87,7 @@ def visualize_eigenvector():
         plt.arrow(p1[0], p1[1], p2[0] - p1[0], p2[1] - p1[1], color=color,
             shape='full', lw=3, length_includes_head=True, head_width=0, zorder=10)
 
+    # plt.savefig("flow_eigenvector_colormap.png")
     plt.show()
 
 
