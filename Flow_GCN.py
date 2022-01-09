@@ -1,12 +1,10 @@
-import dgl
-import torch
+import dgl, torch, argparse, json
 from dgl.dataloading import GraphDataLoader
 from torch.utils.data.sampler import SubsetRandomSampler
-import torch.nn as nn
 import torch.nn.functional as F
-from dgl.nn.pytorch import GraphConv
 
 from datasets.Flow.Flow_Dataset import Flow_Dataset
+from models.GCN import GCN
 
 def collate_data(samples):
     graphs, labels, _ = map(list, zip(*samples))
@@ -28,28 +26,17 @@ def get_samples(dataset, ratio, batch_size):
 
     return train_dataloader, test_dataloader
 
-class GCN(nn.Module):
-    def __init__(self):
-        super(GCN, self).__init__()
-        self.conv1 = GraphConv(1, 1024)
-        self.conv2 = GraphConv(1024, 1024)
-        self.conv3 = GraphConv(1024, 512)
-        self.conv4 = GraphConv(512, 512)
-        self.fn1 = nn.Linear(512, 512)
-        self.fn2 = nn.Linear(512, 256)
-        self.fn3 = nn.Linear(256, 2)
+def get_parameters():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--config', help="Please give a config.json file!")
+    args = parser.parse_args()
+    with open(args.config) as f:
+        config = json.load(f)
 
-    def forward(self, g, h):
-        h = F.relu(self.conv1(g, h))
-        h = F.relu(self.conv2(g, h))
-        h = F.relu(self.conv3(g, h))
-        h = F.relu(self.conv4(g, h))
-        with g.local_scope():
-            g.ndata['h'] = h
-            hg = dgl.mean_nodes(g, 'h')
-            gh = F.relu(self.fn1(hg))
-            gh = F.relu(self.fn2(gh))
-            return F.log_softmax(self.fn3(gh), dim=0)
+    params = config["params"]
+    net_params = config["net_params"]
+
+    return params, net_params
 
 def train_model(model, train_dataloader, num_epochs = 5):
     param = torch.optim.Adam(model.parameters())
@@ -76,11 +63,15 @@ def evaluate_model(model, test_dataloader):
     return num_correct / num_tests
 
 if __name__ == "__main__":
-    dataset = Flow_Dataset()
-    train_dataloader, test_dataloader = get_samples(dataset, 0.8, 16)
+    params, net_params = get_parameters()
+    batch_size = params["batch_size"]
+    epochs = params["epochs"]
 
-    model = GCN()
-    model = train_model(model, train_dataloader, 10)
+    dataset = Flow_Dataset()
+    train_dataloader, test_dataloader = get_samples(dataset, 0.8, batch_size)
+
+    model = GCN(net_params)
+    model = train_model(model, train_dataloader, epochs)
 
     acc = evaluate_model(model, test_dataloader)
     print('Test accuracy:', acc)

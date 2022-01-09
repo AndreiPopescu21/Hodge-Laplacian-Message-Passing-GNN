@@ -1,0 +1,17 @@
+{
+    "gpu": {
+        "use": true,
+        "id": 0
+    },
+    "params": {
+        "epochs": 10,
+        "batch_size": 16
+    },
+    "net_params": {
+        "input_dim": 1,
+        "hidden_dim": 512,
+        "output_dim": 2,
+        "n_layers": 5,
+        "readout": "mean"
+    }
+}

@@ -13,10 +13,11 @@ def plot_arrow(p1, p2, color='red'):
     plt.arrow(p1[0], p1[1], p2[0] - p1[0], p2[1] - p1[1], color=color,
         shape='full', lw=3, length_includes_head=True, head_width=.01, zorder=10)
 
-def get_color_scale(r):
-    g = 50
-    b = 255 
-    return (r / 255, g / 255, b / 255)
+def get_color_scale(fraction):
+    R =  (20-79) * fraction + 79
+    G =  (255-79) * fraction + 79
+    B =  (0-79) * fraction + 79
+    return (int(R) / 255, int(G) / 255, int(B) / 255)
 
 def visualise_trajectories():
     dataset = Flow_Dataset()
@@ -81,16 +82,16 @@ def visualize_eigenvector():
         p1, p2 = points[nodes1[0]], points[nodes1[1]]
 
         value = eigenvector[i].item()
-        mapped_value = (value - min_value) / (max_value - min_value) * 255
+        mapped_value = (value - min_value) / (max_value - min_value)
         color = get_color_scale(mapped_value)
 
         plt.arrow(p1[0], p1[1], p2[0] - p1[0], p2[1] - p1[1], color=color,
             shape='full', lw=3, length_includes_head=True, head_width=0, zorder=10)
 
-    # plt.savefig("flow_eigenvector_colormap.png")
+    plt.savefig("flow_eigenvector_colormap.png")
     plt.show()
 
 
 if __name__ == "__main__":
-    visualise_trajectories()
+    # visualise_trajectories()
     visualize_eigenvector()
