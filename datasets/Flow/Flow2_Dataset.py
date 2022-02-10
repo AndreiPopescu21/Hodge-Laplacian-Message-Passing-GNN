@@ -177,11 +177,11 @@ def generate_trajectory(start_rect, end_rect, ckpt_rect, G: nx.Graph):
 
     ckpt_reached = False
 
-    upper_rect = np.array([[0.0, 0.5], [1.0, 1.0]])
+    upper_rect = np.array([[0.8, 0.8], [1.0, 1.0]])
     if is_inside_rectangle(ckpt_point, upper_rect):
-        treshold_rect = np.array([[0.0, 0.5], [1.0, 1.0]])
+        treshold_rect = np.array([[0.0, 0.0], [0.7, 0.7]])
     else:
-        treshold_rect = np.array([[0.0, 0.0], [1.0, 0.5]])
+        treshold_rect = np.array([[0.3, 0.3], [1.0, 1.0]])
 
     while vertex != end_vertex:
         explored.add(vertex)
@@ -189,7 +189,7 @@ def generate_trajectory(start_rect, end_rect, ckpt_rect, G: nx.Graph):
             ckpt_reached = True
 
         nv = np.array([nghb for nghb in G.neighbors(vertex)
-                       if nghb not in explored and is_inside_rectangle(points[nghb], treshold_rect)])
+                       if nghb not in explored and not is_inside_rectangle(points[nghb], treshold_rect)])
         if len(nv) == 0:
             # If we get stuck because everything around was explored
             # Then just try to generate another trajectory.
@@ -213,10 +213,10 @@ def generate_trajectory(start_rect, end_rect, ckpt_rect, G: nx.Graph):
     return path
 
 def generate_random_trajectories(G: nx.Graph, num_train = 1000, num_test = 1000):
-    start_rect = np.array([[0.0, 0.4], [0.1, 0.6]])
-    end_rect = np.array([[0.8, 0.4], [1.0, 0.6]])
-    bot_rect = np.array([[0.4, 0.0], [0.6, 0.2]])
-    top_rect = np.array([[0.4, 0.8], [0.6, 1.0]])
+    start_rect = np.array([[0.0, 0.8], [0.2, 1.0]])
+    end_rect = np.array([[0.8, 0.0], [1.0, 0.2]])
+    bot_rect = np.array([[0.0, 0.0], [0.2, 0.2]])
+    top_rect = np.array([[0.8, 0.8], [1.0, 1.0]])
     mid_rect = [bot_rect, top_rect]
     
     trajectories, labels = [], []
@@ -244,14 +244,13 @@ def load_flow_dataset(num_points=1000, num_train=1000, num_test=1000, k=3):
     points = np.random.uniform(low=-0.05, high=1.05, size=(num_points, 2))
     triangulation = Delaunay(points)
 
-    # Make sure that each point appears in some triangle.
+    hole1 = np.array([[0.2, 0.2], [0.4, 0.4]])
+    points, triangles = create_hole(points, triangulation.simplices, hole1)
     for i in range(len(points)):
-        assert np.sum(triangulation.simplices == i) > 0
+        assert np.sum(triangles == i) > 0
 
-    hole = np.array([[0.4, 0.4], [0.6, 0.6]])
-    points, triangles = create_hole(points, triangulation.simplices, hole)
-
-    # Make sure that each point appears in some triangle.
+    hole2 = np.array([[0.6, 0.6], [0.8, 0.8]])
+    points, triangles = create_hole(points, triangles, hole2)
     for i in range(len(points)):
         assert np.sum(triangles == i) > 0
 

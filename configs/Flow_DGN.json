@@ -1,0 +1,47 @@
+{
+    "gpu": {
+        "use": false,
+        "id": 0
+    },
+    
+    "model": "DGN",
+    "dataset": "Flow",
+    
+    "params": {
+        "seed": 41,
+        "epochs": 50,
+        "batch_size": 16,
+        "init_lr": 0.001,
+        "lr_reduce_factor": 0.5,
+        "lr_schedule_patience": 5,
+        "min_lr": 1e-5,
+        "weight_decay": 1e-8,
+        "print_epoch_interval": 5,
+        "max_time": 12
+    },
+    
+    "net_params": {
+        "layer_type": "dgl",
+        "L": 2,
+        "in_dim": 1,
+        "hidden_dim": 64,
+        "out_dim": 2,
+        "type_net": "simple",
+        "residual": false,
+        "edge_feat": true,
+        "readout": "mean sum",
+        "in_feat_dropout": 0.0,
+        "dropout": 0.0,
+        "graph_norm": false,
+        "batch_norm": false,
+        "aggregators": "mean sum",
+        "scalers": "identity",
+        "towers": 5,
+        "divide_input_first": false,
+        "divide_input_last": false,
+        "edge_dim": 3,
+        "pretrans_layers" : 1,
+        "posttrans_layers" : 1
+        
+    }
+}

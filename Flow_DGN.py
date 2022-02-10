@@ -1,10 +1,11 @@
-import dgl, torch, argparse, json
+import dgl, argparse, json
+import torch
 from dgl.dataloading import GraphDataLoader
 from torch.utils.data.sampler import SubsetRandomSampler
 import torch.nn.functional as F
 
+from models.DGN.DGN import DGN
 from datasets.Flow.Flow_Dataset import Flow_Dataset
-from models.GCN import GCN
 
 def collate_data(samples):
     graphs, labels, _ = map(list, zip(*samples))
@@ -37,7 +38,7 @@ def get_parameters():
     net_params = config["net_params"]
 
     return params, net_params
-
+        
 def train_model(model, train_dataloader, num_epochs = 5):
     param = torch.optim.Adam(model.parameters())
     for epoch in range(num_epochs):
@@ -45,7 +46,7 @@ def train_model(model, train_dataloader, num_epochs = 5):
         for batched_graph, labels in train_dataloader:
             batched_graph.ndata['node_features'] = batched_graph.ndata['node_features'].float()
             param.zero_grad()
-            logits = model(batched_graph.to('cuda:0'), batched_graph.ndata['node_features'].to('cuda:0'))
+            logits = model(batched_graph.to('cuda:0'), batched_graph.ndata['node_features'].to('cuda:0'), batched_graph.edata['edge_features'].to('cuda:0'), None)
             loss = F.cross_entropy(logits, labels.to('cuda:0'))
             loss.backward()
             param.step()
@@ -58,7 +59,7 @@ def evaluate_model(model, test_dataloader):
     num_correct, num_tests = 0, 0
     for batched_graph, labels in test_dataloader:
         batched_graph.ndata['node_features'] = batched_graph.ndata['node_features'].float()
-        pred = model(batched_graph.to('cuda:0'), batched_graph.ndata['node_features'].to('cuda:0'))
+        pred = model(batched_graph.to('cuda:0'), batched_graph.ndata['node_features'].to('cuda:0'), batched_graph.edata['edge_features'].to('cuda:0'), None)
         num_correct += (pred.argmax(1) == labels.to('cuda:0')).sum().item()
         num_tests += len(labels)
 
@@ -72,7 +73,13 @@ if __name__ == "__main__":
     dataset = Flow_Dataset()
     train_dataloader, test_dataloader = get_samples(dataset, 0.8, batch_size)
 
-    model = GCN(net_params)
+    D = torch.cat([torch.sparse.sum(g.adjacency_matrix(transpose=True), dim=-1).to_dense() for g in
+                       dataset.graphs])
+    net_params['avg_d'] = dict(lin=torch.mean(D),
+                                   exp=torch.mean(torch.exp(torch.div(1, D)) - 1),
+                                   log=torch.mean(torch.log(D + 1)))
+
+    model = DGN(net_params)
     model = train_model(model.to('cuda:0'), train_dataloader, epochs)
 
     acc = evaluate_model(model.to('cuda:0'), test_dataloader)

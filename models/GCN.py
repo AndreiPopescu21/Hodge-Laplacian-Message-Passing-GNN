@@ -19,7 +19,7 @@ class GCN(nn.Module):
         for i in range(n_layers - 2):
             self.layers.append(GraphConv(hidden_dim, hidden_dim))
 
-        self.mlp_layer = self.mlp = nn.Linear(hidden_dim, output_dim)
+        self.mlp_layer = nn.Linear(hidden_dim, output_dim)
 
     def forward(self, g, h):
         for layer in self.layers:

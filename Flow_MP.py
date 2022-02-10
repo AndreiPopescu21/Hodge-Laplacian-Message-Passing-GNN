@@ -3,8 +3,20 @@ from dgl.dataloading import GraphDataLoader
 from torch.utils.data.sampler import SubsetRandomSampler
 import torch.nn.functional as F
 
-from datasets.Flow.Flow_Dataset import Flow_Dataset
-from models.GCN import GCN
+from datasets.Flow.Flow2_Dataset import Flow_Dataset
+from models.MP import MPNN
+
+def get_parameters():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--config', help="Please give a config.json file!")
+    args = parser.parse_args()
+    with open(args.config) as f:
+        config = json.load(f)
+
+    params = config["params"]
+    net_params = config["net_params"]
+
+    return params, net_params
 
 def collate_data(samples):
     graphs, labels, _ = map(list, zip(*samples))
@@ -26,26 +38,13 @@ def get_samples(dataset, ratio, batch_size):
 
     return train_dataloader, test_dataloader
 
-def get_parameters():
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--config', help="Please give a config.json file!")
-    args = parser.parse_args()
-    with open(args.config) as f:
-        config = json.load(f)
-
-    params = config["params"]
-    net_params = config["net_params"]
-
-    return params, net_params
-
 def train_model(model, train_dataloader, num_epochs = 5):
     param = torch.optim.Adam(model.parameters())
     for epoch in range(num_epochs):
         epoch_loss = 0
         for batched_graph, labels in train_dataloader:
-            batched_graph.ndata['node_features'] = batched_graph.ndata['node_features'].float()
             param.zero_grad()
-            logits = model(batched_graph.to('cuda:0'), batched_graph.ndata['node_features'].to('cuda:0'))
+            logits = model(batched_graph.to('cuda:0'), batched_graph.ndata['node_features'].to('cuda:0'), batched_graph.edata['edge_features'].to('cuda:0'))
             loss = F.cross_entropy(logits, labels.to('cuda:0'))
             loss.backward()
             param.step()
@@ -54,11 +53,11 @@ def train_model(model, train_dataloader, num_epochs = 5):
 
     return model
 
+
 def evaluate_model(model, test_dataloader):
     num_correct, num_tests = 0, 0
     for batched_graph, labels in test_dataloader:
-        batched_graph.ndata['node_features'] = batched_graph.ndata['node_features'].float()
-        pred = model(batched_graph.to('cuda:0'), batched_graph.ndata['node_features'].to('cuda:0'))
+        pred = model(batched_graph.to('cuda:0'), batched_graph.ndata['node_features'].to('cuda:0'), batched_graph.edata['edge_features'].to('cuda:0'))
         num_correct += (pred.argmax(1) == labels.to('cuda:0')).sum().item()
         num_tests += len(labels)
 
@@ -72,7 +71,7 @@ if __name__ == "__main__":
     dataset = Flow_Dataset()
     train_dataloader, test_dataloader = get_samples(dataset, 0.8, batch_size)
 
-    model = GCN(net_params)
+    model = MPNN(net_params)
     model = train_model(model.to('cuda:0'), train_dataloader, epochs)
 
     acc = evaluate_model(model.to('cuda:0'), test_dataloader)
