@@ -70,8 +70,8 @@ def visualize_eigenvector():
     
     graph, _, _ = dataset[0]
     eigenvector = graph.edata['edge_features']
-    max_value = max(eigenvector).item()
-    min_value = min(eigenvector).item()
+    max_value = max(eigenvector)
+    min_value = min(eigenvector)
 
     plt.figure(figsize=(10, 8))
     plt.triplot(points[:, 0], points[:, 1], triangles)

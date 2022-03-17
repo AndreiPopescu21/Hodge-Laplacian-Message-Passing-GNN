@@ -4,7 +4,9 @@ import torch
 from scipy.spatial import Delaunay
 from scipy.linalg import null_space
 from scipy.linalg import eig
-from scipy import sparse as sp
+import scipy.sparse as sp
+# from scipy import sparse as sp
+from numpy.linalg import eigh
 
 import random
 import numpy as np
@@ -80,12 +82,69 @@ def create_graph_from_triangulation(points, triangles):
                     tuple_to_edge[(min(v1, v2), max(v1, v2))] = edge_idx
                     edge_idx += 1
                 assert G.has_edge(v2, v1)
-
+                
     G.graph['edge_to_tuple'] = edge_to_tuple
     G.graph['tuple_to_edge'] = tuple_to_edge
     G.graph['points'] = points
     G.graph['triangles'] = triangles
     return G
+
+def generate_trajectory(start_rect, end_rect, ckpt_rect, G: nx.Graph):
+    points = G.graph['points']
+    tuple_to_edge = G.graph['tuple_to_edge']
+
+    start_vertex = sample_point_from_rect(points, start_rect)
+    end_vertex = sample_point_from_rect(points, end_rect)
+    ckpt_vertex = sample_point_from_rect(points, ckpt_rect)
+
+    x = np.zeros((len(tuple_to_edge), 1))
+
+    vertex = start_vertex
+    end_point = points[end_vertex]
+    ckpt_point = points[ckpt_vertex]
+
+    path = [vertex]
+    explored = set()
+
+    ckpt_reached = False
+
+    while vertex != end_vertex:
+        explored.add(vertex)
+        if vertex == ckpt_vertex:
+            ckpt_reached = True
+
+        nv = np.array([nghb for nghb in G.neighbors(vertex)
+                       if nghb not in explored])
+        if len(nv) == 0:
+            # If we get stuck because everything around was explored
+            # Then just try to generate another trajectory.
+            return generate_trajectory(start_rect, end_rect, ckpt_rect, G)
+        npoints = points[nv]
+
+        if ckpt_reached:
+            dist = np.sum((npoints - end_point[None, :]) ** 2, axis=-1)
+        else:
+            dist = np.sum((npoints - ckpt_point[None, :]) ** 2, axis=-1)
+
+        # prob = softmax(-dist**2)
+        # vertex = nv[np.random.choice(len(prob), p=prob)]
+        coin_toss = np.random.uniform()
+
+        if coin_toss < 0.1:
+            vertex = nv[np.random.choice(len(dist))]
+        else:
+            vertex = nv[np.argmin(dist)]
+
+        path.append(vertex)
+
+        # Set the flow value according to the orientation
+        if path[-2] < path[-1]:
+            x[tuple_to_edge[(path[-2], path[-1])], 0] = 1
+        else:
+            x[tuple_to_edge[(path[-1], path[-2])], 0] = -1
+
+    return x, path
+
 
 def extract_boundary_matrices(G: nx.Graph):
     """Compute the boundary and co-boundary matrices for the edges of the complex. """
@@ -136,19 +195,18 @@ def extract_boundary_matrices(G: nx.Graph):
     return B1, B2
 
 def get_hodge_laplacian(B1, B2):
-    return np.dot(B1.T, B1) + np.dot(B2, B2.T)
+    return B1.T @ B1 + B2 @ B2.T
 
 def get_smallest_k_eigenvectors(L1, k):
-    eigenvalues, eigenvectors = eig(L1)
-    eigenvalues, eigenvectors = eigenvalues.real, eigenvectors.real
+    eigenvalues, eigenvectors = eigh(L1)
     sorted_eigenvalues = np.sort(eigenvalues)
     
     k_smallest_eigen = []
     for i in range(k):
         maxcol = list(eigenvalues).index(sorted_eigenvalues[i])
-        v = eigenvectors[:,maxcol]
+        v = eigenvectors[:, maxcol]
         k_smallest_eigen.append(np.abs(v))
-
+    
     return k_smallest_eigen
 
 def process_edge_features(k_smallest_eigen):
@@ -244,7 +302,6 @@ def load_flow_dataset(num_points=1000, num_train=1000, num_test=1000, k=3):
     points = np.random.uniform(low=-0.05, high=1.05, size=(num_points, 2))
     triangulation = Delaunay(points)
 
-    # Make sure that each point appears in some triangle.
     for i in range(len(points)):
         assert np.sum(triangulation.simplices == i) > 0
 
@@ -265,7 +322,7 @@ def load_flow_dataset(num_points=1000, num_train=1000, num_test=1000, k=3):
     L1 = get_hodge_laplacian(B1, B2)
     
     trajectories, labels = generate_random_trajectories(G)
-    k_smallest_eigen = get_smallest_k_eigenvectors(L1, k)
+    k_smallest_eigen = get_smallest_k_eigenvectors(L1, 1)
     eigenvectors = process_edge_features(k_smallest_eigen)
 
     return G, eigenvectors, trajectories, labels
@@ -291,10 +348,10 @@ class Flow_Dataset(DGLDataset):
             edge_features = torch.from_numpy(edge_features)
 
             g = dgl.graph((src, dst), num_nodes=num_nodes)
-            positional_encoding = get_positional_encoding(g, 3)
+            # positional_encoding = get_positional_encoding(g, 3)
             
             g.ndata["node_features"] = node_features
-            g.ndata["eig"] = positional_encoding
+            # g.ndata["eig"] = positional_encoding
             g.edata["edge_features"] = edge_features
 
             g_info = {}

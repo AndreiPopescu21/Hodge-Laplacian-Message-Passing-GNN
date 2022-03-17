@@ -4,7 +4,8 @@ import torch
 from scipy.spatial import Delaunay
 from scipy.linalg import null_space
 from scipy.linalg import eig
-from scipy import sparse as sp
+# from scipy import sparse as sp
+from numpy.linalg import eigh
 
 import random
 import numpy as np
@@ -136,19 +137,18 @@ def extract_boundary_matrices(G: nx.Graph):
     return B1, B2
 
 def get_hodge_laplacian(B1, B2):
-    return np.dot(B1.T, B1) + np.dot(B2, B2.T)
+    return B1.T @ B1 + B2 @ B2.T
 
 def get_smallest_k_eigenvectors(L1, k):
-    eigenvalues, eigenvectors = eig(L1)
-    eigenvalues, eigenvectors = eigenvalues.real, eigenvectors.real
+    eigenvalues, eigenvectors = eigh(L1)
     sorted_eigenvalues = np.sort(eigenvalues)
     
     k_smallest_eigen = []
     for i in range(k):
         maxcol = list(eigenvalues).index(sorted_eigenvalues[i])
-        v = eigenvectors[:,maxcol]
+        v = eigenvectors[:, maxcol]
         k_smallest_eigen.append(np.abs(v))
-
+    
     return k_smallest_eigen
 
 def process_edge_features(k_smallest_eigen):
@@ -240,7 +240,7 @@ def get_positional_encoding(g, pos_enc_dim):
 
     return torch.from_numpy(np.real(EigVec[:, :pos_enc_dim])).float()
 
-def load_flow_dataset(num_points=1000, num_train=1000, num_test=1000, k=3):
+def load_flow_dataset(num_points=1000, num_train=1000, num_test=1000, k=2):
     points = np.random.uniform(low=-0.05, high=1.05, size=(num_points, 2))
     triangulation = Delaunay(points)
 
@@ -264,7 +264,7 @@ def load_flow_dataset(num_points=1000, num_train=1000, num_test=1000, k=3):
     L1 = get_hodge_laplacian(B1, B2)
     
     trajectories, labels = generate_random_trajectories(G)
-    k_smallest_eigen = get_smallest_k_eigenvectors(L1, k)
+    k_smallest_eigen = get_smallest_k_eigenvectors(L1, 2)
     eigenvectors = process_edge_features(k_smallest_eigen)
 
     return G, eigenvectors, trajectories, labels
@@ -290,10 +290,10 @@ class Flow_Dataset(DGLDataset):
             edge_features = torch.from_numpy(edge_features)
 
             g = dgl.graph((src, dst), num_nodes=num_nodes)
-            positional_encoding = get_positional_encoding(g, 3)
+            # positional_encoding = get_positional_encoding(g, 3)
             
             g.ndata["node_features"] = node_features
-            g.ndata["eig"] = positional_encoding
+            # g.ndata["eig"] = positional_encoding
             g.edata["edge_features"] = edge_features
 
             g_info = {}
