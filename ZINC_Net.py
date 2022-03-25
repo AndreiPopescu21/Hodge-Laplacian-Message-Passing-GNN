@@ -55,6 +55,8 @@ class DGNNet(nn.Module):
             self.MLP_layer = MLPReadout(out_dim, 1)  # 1 out dim since regression problem
 
     def forward(self, g, h, e, snorm_n, snorm_e):
+        h = h.to(self.device)
+        e = e.to(self.device)
         h = self.embedding_h(h.long())
         h = self.in_feat_dropout(h).float()
         if self.pos_enc_dim > 0:
@@ -64,7 +66,7 @@ class DGNNet(nn.Module):
             e = self.embedding_e(e.long())
 
         for i, conv in enumerate(self.layers):
-            h_t = conv(g, h, e, snorm_n)
+            h_t = conv(g, h.to(self.device), e.to(self.device), snorm_n)
             h = h_t
         g.ndata['h'] = h
 
