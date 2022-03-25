@@ -8,6 +8,7 @@ import torch, dgl
 
 import torch.optim as optim
 from torch.utils.data import DataLoader
+from torch.utils.data.sampler import SubsetRandomSampler
 
 from tqdm import tqdm
 
@@ -61,16 +62,13 @@ def view_model_param(net_params):
 """
 
 def collate(samples):
-    graphs, labels, _ = map(list, zip(*samples))
+    graphs, labels, _, _ = map(list, zip(*samples))
     batched_graph = dgl.batch(graphs)
-    return batched_graph, torch.tensor(labels)
+    return batched_graph, torch.tensor(labels), None, None
 
 def train_val_pipeline(dataset, params, net_params):
     t0 = time.time()
     per_epoch_time = []
-    trainset = dataset[:dataset.mask['train']]
-    testset = dataset[dataset.mask['train']:dataset.mask['test']]
-    valset = dataset[dataset.mask['test']:dataset.mask['val']]
     # trainset, valset, testset = dataset.train, dataset.val, dataset.test
     device = net_params['device']
 
@@ -81,9 +79,13 @@ def train_val_pipeline(dataset, params, net_params):
     if device == 'cuda':
         torch.cuda.manual_seed(params['seed'])
 
-    print("Training Graphs: ", len(trainset))
-    print("Validation Graphs: ", len(valset))
-    print("Test Graphs: ", len(testset))
+    # print("Training Graphs: ", len(trainset))
+    # print("Validation Graphs: ", len(valset))
+    # print("Test Graphs: ", len(testset))
+
+    train_sampler = SubsetRandomSampler(torch.arange(dataset.mask['train']))
+    test_sampler = SubsetRandomSampler(torch.arange(dataset.mask['train'], dataset.mask['test']))
+    val_sampler = SubsetRandomSampler(torch.arange(dataset.mask['test'], dataset.mask['val']))
 
     model = DGNNet(net_params)
     model = model.to(device)
@@ -97,9 +99,9 @@ def train_val_pipeline(dataset, params, net_params):
     epoch_train_losses, epoch_val_losses = [], []
     epoch_train_MAEs, epoch_val_MAEs = [], []
 
-    train_loader = DataLoader(trainset, batch_size=params['batch_size'], shuffle=True, collate_fn=collate)
-    val_loader = DataLoader(valset, batch_size=params['batch_size'], shuffle=False, collate_fn=collate)
-    test_loader = DataLoader(testset, batch_size=params['batch_size'], shuffle=False, collate_fn=collate)
+    train_loader = DataLoader(dataset, sampler=train_sampler, batch_size=params['batch_size'], collate_fn=collate)
+    val_loader = DataLoader(dataset, sampler=test_sampler, batch_size=params['batch_size'], collate_fn=collate)
+    test_loader = DataLoader(dataset, sampler=val_sampler, batch_size=params['batch_size'], collate_fn=collate)
 
     # At any point you can hit Ctrl + C to break out of training early.
     try:
