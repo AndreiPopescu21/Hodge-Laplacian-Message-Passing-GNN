@@ -1,6 +1,6 @@
 {
     "gpu": {
-      "use": true,
+      "use": false,
       "id": 0
     },
     "model": "DGN",
@@ -30,7 +30,7 @@
       "dropout": 0.0,
       "graph_norm": false,
       "batch_norm": false,
-      "aggregators": "mean hodge-aggregator hodge-aggregator hodge-aggregator",
+      "aggregators": "mean hodge-aggregator-0 hodge-aggregator-1 hodge-aggregator-2 hodge-aggregator-3 hodge-aggregator-4",
       "scalers": "identity amplification attenuation",
       "towers": 5,
       "divide_input_first": false,

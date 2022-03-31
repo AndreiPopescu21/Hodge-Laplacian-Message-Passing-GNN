@@ -1,1 +1,9 @@
 dataset/
+
+__pycache__/
+
+*.pyc
+
+.vscode/launch.json
+
+datasets/Flow/.vscode/launch.json

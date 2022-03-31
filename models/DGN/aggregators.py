@@ -2,40 +2,51 @@ import torch
 from torch import nn
 from functools import partial
 EPS = 1e-8
+
 def aggregate_mean(h, eig, h_in):
     return torch.mean(h, dim=1)
+
 def aggregate_max(h, eig_s, eig_d, h_in):
     return torch.max(h, dim=1)[0]
+
 def aggregate_min(h, eig_s, eig_d, h_in):
     return torch.min(h, dim=1)[0]
+
 def aggregate_std(h, eig_s, eig_d, h_in):
     return torch.sqrt(aggregate_var(h, eig_s, eig_d, h_in) + EPS)
+
 def aggregate_var(h, eig_s, eig_d, h_in):
     h_mean_squares = torch.mean(h * h, dim=-2)
     h_mean = torch.mean(h, dim=-2)
     var = torch.relu(h_mean_squares - h_mean * h_mean)
     return var
+
 def aggregate_sum(h, eig_s, eig_d, h_in):
     return torch.sum(h, dim=1)
+
 def aggregate_dir_av(h, eig_s, eig_d, h_in, eig_idx):
     h_mod = torch.mul(h, (torch.abs(eig_s[:, :, :] - eig_d[:, :, :]) /
                           (torch.sum(torch.abs(eig_s[:, :, :] - eig_d[:, :, :]), keepdim=True,
                                      dim=1) + EPS)))
     return torch.sum(h_mod, dim=1)
+
 def aggregate_dir_softmax(h, eig_s, eig_d, h_in, eig_idx, alpha):
     h_mod = torch.mul(h, torch.nn.Softmax(1)(
         alpha * (torch.abs(eig_s[:, :, eig_idx] - eig_d[:, :, eig_idx]))))
     return torch.sum(h_mod, dim=1)
+
 def aggregate_dir_dx(h, eig_s, eig_d, h_in, eig_idx):
     eig_w = ((eig_s[:, :, :] - eig_d[:, :, :]) /
              (torch.sum(torch.abs(eig_s[:, :, :] - eig_d[:, :, :]), keepdim=True, dim=1) + EPS))
     h_mod = torch.mul(h, eig_w)
     return torch.abs(torch.sum(h_mod, dim=1) - torch.sum(eig_w, dim=1) * h_in)
+
 def aggregate_dir_dx_no_abs(h, eig_s, eig_d, h_in, eig_idx):
     eig_w = ((eig_s[:, :, eig_idx] - eig_d[:, :, eig_idx]) /
              (torch.sum(torch.abs(eig_s[:, :, eig_idx] - eig_d[:, :, eig_idx]), keepdim=True, dim=1) + EPS)).unsqueeze(-1)
     h_mod = torch.mul(h, eig_w)
     return torch.sum(h_mod, dim=1) - torch.sum(eig_w, dim=1) * h_in
+
 def aggregate_dir_dx_balanced(h, eig_s, eig_d, h_in, eig_idx):
     eig_front = (torch.relu(eig_s[:, :, eig_idx] - eig_d[:, :, eig_idx]) /
                  (torch.sum(torch.abs(torch.relu(eig_s[:, :, eig_idx] - eig_d[:, :, eig_idx])), keepdim=True,
@@ -46,9 +57,11 @@ def aggregate_dir_dx_balanced(h, eig_s, eig_d, h_in, eig_idx):
     eig_w = (eig_front + eig_back) / 2
     h_mod = torch.mul(h, eig_w)
     return torch.abs(torch.sum(h_mod, dim=1) - torch.sum(eig_w, dim=1) * h_in)
-def hodge_aggregator(h, eig, h_in):
-    h_mod = torch.mul(h, eig)
+
+def hodge_aggregator(h, eig, h_in, eig_idx):
+    h_mod = torch.mul(h, eig[eig_idx])
     return torch.sum(h_mod, dim=1)
+
 AGGREGATORS = {'mean': aggregate_mean, 'sum': aggregate_sum, 'max': aggregate_max, 'min': aggregate_min,
                'std': aggregate_std, 'var': aggregate_var,
                'dir1-av': partial(aggregate_dir_av, eig_idx=1),
@@ -69,4 +82,9 @@ AGGREGATORS = {'mean': aggregate_mean, 'sum': aggregate_sum, 'max': aggregate_ma
                'dir1-dx-balanced': partial(aggregate_dir_dx_balanced, eig_idx=1),
                'dir2-dx-balanced': partial(aggregate_dir_dx_balanced, eig_idx=2),
                'dir3-dx-balanced': partial(aggregate_dir_dx_balanced, eig_idx=3),
-               'hodge-aggregator': hodge_aggregator}
+               'hodge-aggregator-0': partial(hodge_aggregator, eig_idx = 0),
+               'hodge-aggregator-1': partial(hodge_aggregator, eig_idx = 1),
+               'hodge-aggregator-2': partial(hodge_aggregator, eig_idx = 2),
+               'hodge-aggregator-3': partial(hodge_aggregator, eig_idx = 3),
+               'hodge-aggregator-4': partial(hodge_aggregator, eig_idx = 4)
+               }

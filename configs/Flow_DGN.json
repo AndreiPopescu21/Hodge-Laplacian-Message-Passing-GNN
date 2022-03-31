@@ -34,7 +34,7 @@
         "dropout": 0.0,
         "graph_norm": false,
         "batch_norm": false,
-        "aggregators": "mean sum",
+        "aggregators": "mean hodge-aggregator",
         "scalers": "identity",
         "towers": 5,
         "divide_input_first": false,

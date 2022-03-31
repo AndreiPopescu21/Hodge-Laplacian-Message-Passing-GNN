@@ -82,7 +82,7 @@ class DGNLayerComplex(nn.Module):
     def message_func(self, edges):
             # return {‘e’: edges.data[‘e’], ‘eig_s’: edges.data[‘eig_s’].to(‘cuda’ if torch.cuda.is_available() else ‘cpu’),
             #         ‘eig_d’: edges.data[‘eig_d’].to(‘cuda’ if torch.cuda.is_available() else ‘cpu’)}
-            return {'e': edges.data['bond_type'].to(dev), 'eig': edges.data['hodge_eig']}
+            return {'e': edges.data['bond_type'], 'eig': edges.data['hodge_eig']}
 
     def reduce_func(self, nodes):
         h_in = nodes.data['h']
@@ -156,7 +156,7 @@ class DGNLayerSimple(nn.Module):
     def message_func(self, edges):
             # return {‘e’: edges.data[‘e’], ‘eig_s’: edges.data[‘eig_s’].to(‘cuda’ if torch.cuda.is_available() else ‘cpu’),
             #         ‘eig_d’: edges.data[‘eig_d’].to(‘cuda’ if torch.cuda.is_available() else ‘cpu’)}
-            return {'e': edges.data['bond_type'], 'eig': edges.data['hodge_eig'].to('cuda')}
+            return {'e': edges.data['bond_type'], 'eig': edges.data['hodge_eig']}
 
     def reduce_func(self, nodes):
         h_in = nodes.data['h']
