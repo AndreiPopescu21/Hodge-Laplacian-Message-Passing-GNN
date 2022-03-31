@@ -184,7 +184,7 @@ class ZINC_Dataset(DGLDataset):
             B1, B2 = extract_boundary_matrices(G)
             L1 = get_hodge_laplacian(B1, B2)
 
-            k_smallest_eigen = get_smallest_k_eigenvectors(L1, 2)
+            k_smallest_eigen = get_smallest_k_eigenvectors(L1, 5)
 
             eigenvectors = np.array(process_eigen(k_smallest_eigen))
             eigenvectors = torch.from_numpy(eigenvectors)

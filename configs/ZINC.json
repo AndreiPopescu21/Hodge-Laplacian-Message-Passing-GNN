@@ -19,23 +19,23 @@
       "max_time": 48
     },
     "net_params": {
-      "L": 4,
+      "L": 6,
       "hidden_dim": 45,
       "out_dim": 45,
       "type_net": "complex",
       "residual": true,
-      "edge_feat": false,
+      "edge_feat": true,
       "readout": "mean",
       "in_feat_dropout": 0.0,
       "dropout": 0.0,
       "graph_norm": false,
       "batch_norm": false,
-      "aggregators": "mean dir1-dx dir1-av",
+      "aggregators": "mean hodge-aggregator hodge-aggregator hodge-aggregator",
       "scalers": "identity amplification attenuation",
       "towers": 5,
       "divide_input_first": false,
       "divide_input_last": true,
-      "edge_dim": 0,
+      "edge_dim": 5,
       "pretrans_layers" : 1,
       "posttrans_layers" : 1
     }

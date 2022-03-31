@@ -80,21 +80,20 @@ class DGNLayerComplex(nn.Module):
         return {'e': self.pretrans(z2), 'eig_s': edges.src['eig'], 'eig_d': edges.dst['eig']}
 
     def message_func(self, edges):
-        return {'e': edges.data['e'], 'eig_s': edges.data['eig_s'].to('cuda' if torch.cuda.is_available() else 'cpu'),
-                'eig_d': edges.data['eig_d'].to('cuda' if torch.cuda.is_available() else 'cpu')}
+            # return {‘e’: edges.data[‘e’], ‘eig_s’: edges.data[‘eig_s’].to(‘cuda’ if torch.cuda.is_available() else ‘cpu’),
+            #         ‘eig_d’: edges.data[‘eig_d’].to(‘cuda’ if torch.cuda.is_available() else ‘cpu’)}
+            return {'e': edges.data['bond_type'].to(dev), 'eig': edges.data['hodge_eig']}
 
     def reduce_func(self, nodes):
         h_in = nodes.data['h']
         h = nodes.mailbox['e']
-        eig_s = nodes.mailbox['eig_s']
-        eig_d = nodes.mailbox['eig_d']
+        eig = nodes.mailbox['eig']
+        # eig_d = nodes.mailbox[‘eig_d’]
         D = h.shape[-2]
-
         # aggregators and scalers
-        h = torch.cat([aggregate(h, eig_s, eig_d, h_in) for aggregate in self.aggregators], dim=1)
+        h = torch.cat([aggregate(h, eig, h_in) for aggregate in self.aggregators], dim=1)
         if len(self.scalers) > 1:
             h = torch.cat([scale(h, D=D, avg_d=self.avg_d) for scale in self.scalers], dim=1)
-
         return {'h': h}
 
     def posttrans_nodes(self, nodes):
@@ -102,14 +101,14 @@ class DGNLayerComplex(nn.Module):
 
     def forward(self, g, h, e, snorm_n):
 
-        h_in = h
+        h_in = h.to(device)
         g.ndata['h'] = h
 
         if self.edge_features:  # add the edges information only if edge_features = True
             g.edata['ef'] = e
 
         # pretransformation
-        g.apply_edges(self.pretrans_edges)
+        # g.apply_edges(self.pretrans_edges)
 
         # aggregation
         g.update_all(self.message_func, self.reduce_func)
@@ -145,33 +144,36 @@ class DGNLayerSimple(nn.Module):
         self.scalers = scalers
         self.batchnorm_h = nn.BatchNorm1d(out_dim)
 
-        self.posttrans = MLP(in_size=(len(aggregators) * len(scalers)) * in_dim, hidden_size=out_dim,
+        self.posttrans = MLP(in_size=48, hidden_size=out_dim,
                              out_size=out_dim, layers=posttrans_layers, mid_activation='relu', last_activation='none')
         self.avg_d = avg_d
         if in_dim != out_dim:
             self.residual = False
 
-    def pretrans_edges(self, edges):
-        return {'e': edges.src['h'], 'eig_s': edges.src['eig'], 'eig_d': edges.dst['eig']}
+    # def pretrans_edges(self, edges):
+    #     return {'e': edges.src['h'], 'eig_s': edges.src['eig'], 'eig_d': edges.dst['eig']}
 
     def message_func(self, edges):
-        return {'e': edges.data['e'], 'eig_s': edges.data['eig_s'].to('cuda' if torch.cuda.is_available() else 'cpu'),
-                'eig_d': edges.data['eig_d'].to('cuda' if torch.cuda.is_available() else 'cpu')}
+            # return {‘e’: edges.data[‘e’], ‘eig_s’: edges.data[‘eig_s’].to(‘cuda’ if torch.cuda.is_available() else ‘cpu’),
+            #         ‘eig_d’: edges.data[‘eig_d’].to(‘cuda’ if torch.cuda.is_available() else ‘cpu’)}
+            return {'e': edges.data['bond_type'], 'eig': edges.data['hodge_eig'].to('cuda')}
 
     def reduce_func(self, nodes):
         h_in = nodes.data['h']
         h = nodes.mailbox['e']
-        eig_s = nodes.mailbox['eig_s']
-        eig_d = nodes.mailbox['eig_d']
+        eig = nodes.mailbox['eig']
+<<<<<<< HEAD
+        # eig_d = nodes.mailbox['eig_d']
+=======
+        # eig_d = nodes.mailbox[‘eig_d’]
+>>>>>>> 03bcf26da16e468ad1fa31706193891c5affb09a
         D = h.shape[-2]
-
         # aggregators and scalers
-        h = torch.cat([aggregate(h, eig_s, eig_d, h_in) for aggregate in self.aggregators], dim=1)
+        h = torch.cat([aggregate(h, eig, h_in) for aggregate in self.aggregators], dim=1)
         if len(self.scalers) > 1:
             h = torch.cat([scale(h, D=D, avg_d=self.avg_d) for scale in self.scalers], dim=1)
-
         return {'h': h}
-
+            
     def posttrans_nodes(self, nodes):
         return self.posttrans(nodes.data['h'])
 
@@ -180,14 +182,14 @@ class DGNLayerSimple(nn.Module):
         g.ndata['h'] = h
 
         # pretransformation
-        g.apply_edges(self.pretrans_edges)
+        # g.apply_edges(self.pretrans_edges)
 
         # aggregation
         g.update_all(self.message_func, self.reduce_func)
         h = g.ndata['h']
 
         # posttransformation
-        h = self.posttrans(h)
+        h = self.posttrans(h.float())
 
         # graph and batch normalization and residual
         if self.graph_norm:
