@@ -162,11 +162,7 @@ class DGNLayerSimple(nn.Module):
         h_in = nodes.data['h']
         h = nodes.mailbox['e']
         eig = nodes.mailbox['eig']
-<<<<<<< HEAD
-        # eig_d = nodes.mailbox['eig_d']
-=======
         # eig_d = nodes.mailbox[‘eig_d’]
->>>>>>> 03bcf26da16e468ad1fa31706193891c5affb09a
         D = h.shape[-2]
         # aggregators and scalers
         h = torch.cat([aggregate(h, eig, h_in) for aggregate in self.aggregators], dim=1)

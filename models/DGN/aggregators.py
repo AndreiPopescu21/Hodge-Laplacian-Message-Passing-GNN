@@ -46,11 +46,9 @@ def aggregate_dir_dx_balanced(h, eig_s, eig_d, h_in, eig_idx):
     eig_w = (eig_front + eig_back) / 2
     h_mod = torch.mul(h, eig_w)
     return torch.abs(torch.sum(h_mod, dim=1) - torch.sum(eig_w, dim=1) * h_in)
-
 def hodge_aggregator(h, eig, h_in):
     h_mod = torch.mul(h, eig)
     return torch.sum(h_mod, dim=1)
-
 AGGREGATORS = {'mean': aggregate_mean, 'sum': aggregate_sum, 'max': aggregate_max, 'min': aggregate_min,
                'std': aggregate_std, 'var': aggregate_var,
                'dir1-av': partial(aggregate_dir_av, eig_idx=1),
