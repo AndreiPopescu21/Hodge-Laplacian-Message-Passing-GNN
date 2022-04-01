@@ -9,6 +9,8 @@ from scipy import sparse as sp
 import dgl, torch
 from dgl.data import DGLDataset
 
+DEBUGGING_MODE = True
+
 def load_data():
     with open(str(Path(__file__).parent.absolute()) + '/dataset/test.pickle', 'rb') as f:
         train = pickle.load(f)
@@ -16,7 +18,12 @@ def load_data():
         test = pickle.load(f)
     with open(str(Path(__file__).parent.absolute()) + '/dataset/val.pickle', 'rb') as f:
         val = pickle.load(f)
-    
+
+    if DEBUGGING_MODE:
+        train = train[:10]
+        test = test[:10]
+        val = val[:10]
+
     mask = {}
     mask['train'] = len(train)
     mask['test'] = len(train) + len(test)
