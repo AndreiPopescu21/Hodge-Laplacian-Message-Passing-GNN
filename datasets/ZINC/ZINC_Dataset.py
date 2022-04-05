@@ -9,7 +9,7 @@ from scipy import sparse as sp
 import dgl, torch
 from dgl.data import DGLDataset
 
-DEBUGGING_MODE = True
+DEBUGGING_MODE = False
 
 def load_data():
     with open(str(Path(__file__).parent.absolute()) + '/dataset/test.pickle', 'rb') as f:
@@ -195,6 +195,7 @@ class ZINC_Dataset(DGLDataset):
 
             eigenvectors = np.array(process_eigen(k_smallest_eigen))
             eigenvectors = torch.from_numpy(eigenvectors)
+
             atom_type = torch.from_numpy(np.array(data['atom_type']))
             bond_types = torch.from_numpy(np.array([[edge[2]['weight']] for edge in G.edges(data=True)]))
             logP_SA_cycle_normalized = data['logP_SA_cycle_normalized']

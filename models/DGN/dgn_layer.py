@@ -144,7 +144,7 @@ class DGNLayerSimple(nn.Module):
         self.scalers = scalers
         self.batchnorm_h = nn.BatchNorm1d(out_dim)
 
-        self.posttrans = MLP(in_size=48, hidden_size=out_dim,
+        self.posttrans = MLP(in_size=18, hidden_size=out_dim,
                              out_size=out_dim, layers=posttrans_layers, mid_activation='relu', last_activation='none')
         self.avg_d = avg_d
         if in_dim != out_dim:
@@ -162,6 +162,7 @@ class DGNLayerSimple(nn.Module):
         h_in = nodes.data['h']
         h = nodes.mailbox['e']
         eig = nodes.mailbox['eig']
+        
         # eig_d = nodes.mailbox[‘eig_d’]
         D = h.shape[-2]
         # aggregators and scalers

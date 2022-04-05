@@ -59,7 +59,7 @@ def aggregate_dir_dx_balanced(h, eig_s, eig_d, h_in, eig_idx):
     return torch.abs(torch.sum(h_mod, dim=1) - torch.sum(eig_w, dim=1) * h_in)
 
 def hodge_aggregator(h, eig, h_in, eig_idx):
-    h_mod = torch.mul(h, eig[eig_idx])
+    h_mod = torch.mul(h, eig[:, :, eig_idx].unsqueeze(dim=2))
     return torch.sum(h_mod, dim=1)
 
 AGGREGATORS = {'mean': aggregate_mean, 'sum': aggregate_sum, 'max': aggregate_max, 'min': aggregate_min,
