@@ -19,9 +19,9 @@
       "max_time": 48
     },
     "net_params": {
-      "L": 6,
-      "hidden_dim": 45,
-      "out_dim": 45,
+      "L": 7,
+      "hidden_dim": 54,
+      "out_dim": 54,
       "type_net": "complex",
       "residual": true,
       "edge_feat": true,
@@ -30,7 +30,7 @@
       "dropout": 0.0,
       "graph_norm": false,
       "batch_norm": false,
-      "aggregators": "mean hodge-aggregator-0 hodge-aggregator-1 hodge-aggregator-2 hodge-aggregator-3 hodge-aggregator-4",
+      "aggregators": "mean max min",
       "scalers": "identity amplification attenuation",
       "towers": 5,
       "divide_input_first": false,

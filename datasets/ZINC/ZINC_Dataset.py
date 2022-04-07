@@ -209,7 +209,7 @@ class ZINC_Dataset(DGLDataset):
             g.edata['bond_type'] = bond_types.float()
             g.edata['hodge_eig'] = eigenvectors
 
-            g = positional_encoding(g, 1)
+            g = positional_encoding(g, 3)
             g.ndata['eig'] = g.ndata['pos_enc']
 
             self.graphs.append(g)

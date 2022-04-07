@@ -2,6 +2,7 @@ EPS = 1e-5
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import dgl.function as fn
 
 from .aggregators import AGGREGATORS
 from .layers import MLP, FCLayer
@@ -144,7 +145,7 @@ class DGNLayerSimple(nn.Module):
         self.scalers = scalers
         self.batchnorm_h = nn.BatchNorm1d(out_dim)
 
-        self.posttrans = MLP(in_size=18, hidden_size=out_dim,
+        self.posttrans = MLP(in_size=54, hidden_size=out_dim,
                              out_size=out_dim, layers=posttrans_layers, mid_activation='relu', last_activation='none')
         self.avg_d = avg_d
         if in_dim != out_dim:
@@ -176,17 +177,21 @@ class DGNLayerSimple(nn.Module):
 
     def forward(self, g, h, e, snorm_n):
         h_in = h
-        g.ndata['h'] = h
+        g.ndata['h'] = h.float()
+        g.edata['e'] = e.float()
 
         # pretransformation
         # g.apply_edges(self.pretrans_edges)
 
         # aggregation
-        g.update_all(self.message_func, self.reduce_func)
-        h = g.ndata['h']
+        # g.update_all(self.message_func, self.reduce_func)
+        g.update_all(fn.u_mul_e('h', 'e', 'm'),
+                    fn.sum('m', 'ft'))
+        h = g.ndata['ft']
 
         # posttransformation
         h = self.posttrans(h.float())
+        
 
         # graph and batch normalization and residual
         if self.graph_norm:
@@ -253,8 +258,8 @@ class DGNTower(nn.Module):
     def forward(self, g, h, e, snorm_n):
         g.ndata['h'] = h
 
-        if self.edge_features:  # add the edges information only if edge_features = True
-            g.edata['ef'] = e
+        # if self.edge_features:  # add the edges information only if edge_features = True
+        g.edata['ef'] = e
 
         # pretransformation
         g.apply_edges(self.pretrans_edges)
