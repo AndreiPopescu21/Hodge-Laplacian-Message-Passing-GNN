@@ -7,3 +7,7 @@ __pycache__/
 .vscode/launch.json
 
 datasets/Flow/.vscode/launch.json
+
+run_zinc.sh
+
+datasets/Flow/datasetgraph.pickle

@@ -102,7 +102,7 @@ class DGNLayerComplex(nn.Module):
 
     def forward(self, g, h, e, snorm_n):
 
-        h_in = h.to(device)
+        h_in = h
         g.ndata['h'] = h
 
         if self.edge_features:  # add the edges information only if edge_features = True
