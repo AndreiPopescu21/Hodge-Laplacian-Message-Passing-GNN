@@ -100,8 +100,8 @@ def train_val_pipeline(dataset, params, net_params):
     epoch_train_MAEs, epoch_val_MAEs = [], []
 
     train_loader = DataLoader(dataset, sampler=train_sampler, batch_size=params['batch_size'], collate_fn=collate)
-    val_loader = DataLoader(dataset, sampler=test_sampler, batch_size=params['batch_size'], collate_fn=collate)
-    test_loader = DataLoader(dataset, sampler=val_sampler, batch_size=params['batch_size'], collate_fn=collate)
+    val_loader = DataLoader(dataset, sampler=val_sampler, batch_size=params['batch_size'], collate_fn=collate)
+    test_loader = DataLoader(dataset, sampler=test_sampler, batch_size=params['batch_size'], collate_fn=collate)
 
     # At any point you can hit Ctrl + C to break out of training early.
     try:

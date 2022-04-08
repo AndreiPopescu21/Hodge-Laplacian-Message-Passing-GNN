@@ -1,6 +1,6 @@
 {
     "gpu": {
-      "use": false,
+      "use": true,
       "id": 0
     },
     "model": "DGN",

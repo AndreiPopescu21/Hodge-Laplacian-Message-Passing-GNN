@@ -12,7 +12,7 @@ from dgl.data import DGLDataset
 DEBUGGING_MODE = False
 
 def load_data():
-    with open(str(Path(__file__).parent.absolute()) + '/dataset/test.pickle', 'rb') as f:
+    with open(str(Path(__file__).parent.absolute()) + '/dataset/train.pickle', 'rb') as f:
         train = pickle.load(f)
     with open(str(Path(__file__).parent.absolute()) + '/dataset/test.pickle', 'rb') as f:
         test = pickle.load(f)
