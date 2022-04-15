@@ -34,10 +34,10 @@ class DGNNet(nn.Module):
         self.device = net_params['device']
 
         self.in_feat_dropout = nn.Dropout(in_feat_dropout)
+        
+        # self.embedding_e = nn.Embedding(num_bond_type, edge_dim)
         self.embedding_h = nn.Embedding(num_atom_type, hidden_dim)
-        if self.edge_feat:
-            self.embedding_e = nn.Embedding(num_bond_type, edge_dim)
-
+        
         self.layers = nn.ModuleList(
             [DGNLayer(in_dim=hidden_dim, out_dim=hidden_dim, dropout=dropout, graph_norm=self.graph_norm,
                       batch_norm=self.batch_norm, residual=self.residual, aggregators=self.aggregators,
@@ -59,12 +59,16 @@ class DGNNet(nn.Module):
         g = g.to(self.device)
         h = h.to(self.device)
         e = e.to(self.device)
+
         h = self.embedding_h(h.long())
         h = self.in_feat_dropout(h).float()
+
         # if self.pos_enc_dim > 0:
         h_pos_enc = self.node_embedding_pos_enc(g.ndata['pos_enc'].to(self.device).float())
         h = h.float() + h_pos_enc
         # if self.edge_feat:
+        
+        # e = self.embedding_e(e.long())
         e_pos_enc = self.edge_embedding_pos_enc(g.edata['hodge_eig'].to(self.device).float())
         e = e.float() + e_pos_enc
 

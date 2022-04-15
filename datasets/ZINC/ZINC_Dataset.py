@@ -8,12 +8,18 @@ from scipy import sparse as sp
 
 import dgl, torch
 from dgl.data import DGLDataset
+from .signbasisnet import SignPlus, IGNBasisInv, IGNShared
+from .models import MLP, EqDeepSetsEncoder
 
-DEBUGGING_MODE = False
+DEBUGGING_MODE = True
 
 def load_data():
-    with open(str(Path(__file__).parent.absolute()) + '/dataset/train.pickle', 'rb') as f:
-        train = pickle.load(f)
+    if DEBUGGING_MODE == False:
+        with open(str(Path(__file__).parent.absolute()) + '/dataset/train.pickle', 'rb') as f:
+            train = pickle.load(f)
+    else:
+        with open(str(Path(__file__).parent.absolute()) + '/dataset/val.pickle', 'rb') as f:
+            train = pickle.load(f)
     with open(str(Path(__file__).parent.absolute()) + '/dataset/test.pickle', 'rb') as f:
         test = pickle.load(f)
     with open(str(Path(__file__).parent.absolute()) + '/dataset/val.pickle', 'rb') as f:
@@ -151,7 +157,7 @@ def get_smallest_k_eigenvectors(L1, k):
         v = eigenvectors[:, maxcol]
         k_smallest_eigen.append(np.abs(v))
     
-    return k_smallest_eigen
+    return sorted_eigenvalues[:k], k_smallest_eigen
 
 def process_eigen(k_smallest_eigen):
     k = len(k_smallest_eigen)
@@ -164,15 +170,45 @@ def process_eigen(k_smallest_eigen):
 
 def positional_encoding(g, pos_enc_dim):
     A = g.adjacency_matrix_scipy(return_edge_ids=False).astype(float)
-    N = sp.diags(dgl.backend.asnumpy(g.in_degrees()).clip(1) ** -0.5, dtype=float)
-    L = sp.eye(g.number_of_nodes()) - N * A * N
+    a = nx.from_numpy_matrix(A.todense())
+    L = nx.laplacian_matrix(a).toarray()
 
-    EigVal, EigVec = np.linalg.eig(L.toarray())
+    EigVal, EigVec = np.linalg.eig(L)
     idx = EigVal.argsort()  # increasing order
     EigVal, EigVec = EigVal[idx], np.real(EigVec[:, idx])
-    g.ndata['pos_enc'] = torch.from_numpy(EigVec[:, 1:pos_enc_dim + 1]).float()
+    # g.ndata['pos_enc'] = torch.from_numpy(EigVec[:, 1:pos_enc_dim + 1]).float()
 
-    return g
+    return torch.from_numpy(idx[1:pos_enc_dim+1]).float(), torch.from_numpy(EigVec[:, 1:pos_enc_dim + 1]).float()
+    # # eigenvalues, eigenvectors = eigh(L)
+    # # sorted_eigenvalues = np.sort(eigenvalues)
+    # # print(eigenvalues)
+    # # k=3
+    
+    # # k_smallest_eigen = []
+    # # for i in range(k):
+    # #     maxcol = list(eigenvalues).index(sorted_eigenvalues[i])
+    # #     v = eigenvectors[:, maxcol]
+    # #     k_smallest_eigen.append(np.abs(v))
+    
+    # # return torch.FloatTensor(sorted_eigenvalues[:k]), torch.FloatTensor(k_smallest_eigen)
+    # return None, None
+
+def around(x, decimals=5):
+    """ round to a number of decimal places """
+    return torch.round(x * 10**decimals) / (10**decimals)
+
+def get_proj(eigvals, eigvecs, N):
+    rounded_vals = around(eigvals, decimals=5)
+    uniq_vals, inv_inds, counts = rounded_vals.unique(return_inverse=True, return_counts=True)
+    uniq_mults = counts.unique()
+
+    sections = torch.cumsum(counts, 0)
+    eigenspaces = torch.tensor_split(eigvecs, sections.cpu(), dim=1)[:-1]
+    projectors = [V @ V.T for V in eigenspaces]
+
+    projectors = [P.reshape(1,1,N,N) for P in projectors]
+
+    return torch.FloatTensor(projectors)
 
 class ZINC_Dataset(DGLDataset):
     def __init__(self):
@@ -183,6 +219,7 @@ class ZINC_Dataset(DGLDataset):
         self.graphs = []
         self.logP_SA_cycle_normalized = []
         self.G = []
+        self.eigenspaces = []
 
         for data in dataset:
             A = data['bond_type']
@@ -191,7 +228,8 @@ class ZINC_Dataset(DGLDataset):
             B1, B2 = extract_boundary_matrices(G)
             L1 = get_hodge_laplacian(B1, B2)
 
-            k_smallest_eigen = get_smallest_k_eigenvectors(L1, 5)
+            eigvals, k_smallest_eigen = get_smallest_k_eigenvectors(L1, 5)
+            edge_proj = get_proj(torch.FloatTensor(eigvals), torch.FloatTensor(k_smallest_eigen), G.number_of_edges())
 
             eigenvectors = np.array(process_eigen(k_smallest_eigen))
             eigenvectors = torch.from_numpy(eigenvectors)
@@ -209,9 +247,12 @@ class ZINC_Dataset(DGLDataset):
             g.edata['bond_type'] = bond_types.float()
             g.edata['hodge_eig'] = eigenvectors
 
-            g = positional_encoding(g, 3)
-            g.ndata['eig'] = g.ndata['pos_enc']
+            node_eigval, node_eigvect = positional_encoding(g, 3)
+            g.ndata['eig'] = node_eigvect
+            g.ndata['pos_enc'] = node_eigvect
 
+            node_proj = get_proj(torch.FloatTensor(node_eigval), torch.FloatTensor(node_eigvect), G.number_of_nodes())
+            g.ndata['proj'] = node_proj
             self.graphs.append(g)
             self.logP_SA_cycle_normalized.append(logP_SA_cycle_normalized)
             self.G.append(G)
