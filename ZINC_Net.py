@@ -19,7 +19,7 @@ class DGNNet(nn.Module):
         self.pos_enc_dim = net_params['pos_enc_dim']
         # if self.pos_enc_dim > 0:
         self.edge_embedding_pos_enc = nn.Linear(5, hidden_dim)
-        self.node_embedding_pos_enc = nn.Linear(3, hidden_dim)
+        self.node_embedding_pos_enc = nn.Linear(1, hidden_dim)
         self.readout = net_params['readout']
         self.graph_norm = net_params['graph_norm']
         self.batch_norm = net_params['batch_norm']
@@ -66,7 +66,6 @@ class DGNNet(nn.Module):
         # if self.pos_enc_dim > 0:
         h_pos_enc = self.node_embedding_pos_enc(g.ndata['pos_enc'].to(self.device).float())
         h = h.float() + h_pos_enc
-        # if self.edge_feat:
         
         # e = self.embedding_e(e.long())
         e_pos_enc = self.edge_embedding_pos_enc(g.edata['hodge_eig'].to(self.device).float())

@@ -28,7 +28,7 @@ def train_epoch(model, optimizer, device, data_loader, epoch, flip):
         optimizer.zero_grad()
         batch_scores = model.forward(batch_graphs, batch_x, batch_e, None, None)
         loss = model.loss(batch_scores, batch_targets)
-        loss.backward()
+        loss.backward(retain_graph=True)
         optimizer.step()
         epoch_loss += loss.detach().item()
         epoch_train_mae += MAE(batch_scores, batch_targets)

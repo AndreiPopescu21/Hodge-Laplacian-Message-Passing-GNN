@@ -8,8 +8,9 @@ from scipy import sparse as sp
 
 import dgl, torch
 from dgl.data import DGLDataset
-from .signbasisnet import SignPlus, IGNBasisInv, IGNShared
+from .signbasisnet import IGNBasisInv
 from .models import MLP, EqDeepSetsEncoder
+from tqdm import tqdm
 
 DEBUGGING_MODE = True
 
@@ -178,7 +179,7 @@ def positional_encoding(g, pos_enc_dim):
     EigVal, EigVec = EigVal[idx], np.real(EigVec[:, idx])
     # g.ndata['pos_enc'] = torch.from_numpy(EigVec[:, 1:pos_enc_dim + 1]).float()
 
-    return torch.from_numpy(idx[1:pos_enc_dim+1]).float(), torch.from_numpy(EigVec[:, 1:pos_enc_dim + 1]).float()
+    return torch.from_numpy(EigVal[1:pos_enc_dim+1]).float(), torch.from_numpy(EigVec[:, 1:pos_enc_dim + 1]).float()
     # # eigenvalues, eigenvectors = eigh(L)
     # # sorted_eigenvalues = np.sort(eigenvalues)
     # # print(eigenvalues)
@@ -208,7 +209,17 @@ def get_proj(eigvals, eigvecs, N):
 
     projectors = [P.reshape(1,1,N,N) for P in projectors]
 
-    return torch.FloatTensor(projectors)
+    same_size_projs = {mult.item(): [] for mult in uniq_mults}
+    for i in range(len(projectors)):
+        mult = counts[i].item()
+        same_size_projs[mult].append(projectors[i])
+    for mult, projs in same_size_projs.items():
+        same_size_projs[mult] = torch.cat(projs, dim=0)
+
+    return same_size_projs, torch.FloatTensor([t.numpy() for t in projectors])
+
+def IGN():
+    pass
 
 class ZINC_Dataset(DGLDataset):
     def __init__(self):
@@ -220,8 +231,10 @@ class ZINC_Dataset(DGLDataset):
         self.logP_SA_cycle_normalized = []
         self.G = []
         self.eigenspaces = []
+        self.node_pos_enc = []
+        self.edge_pos_enc = []
 
-        for data in dataset:
+        for data in tqdm(dataset):
             A = data['bond_type']
             G = construct_graph_from_adjacency(A)
 
@@ -229,7 +242,21 @@ class ZINC_Dataset(DGLDataset):
             L1 = get_hodge_laplacian(B1, B2)
 
             eigvals, k_smallest_eigen = get_smallest_k_eigenvectors(L1, 5)
-            edge_proj = get_proj(torch.FloatTensor(eigvals), torch.FloatTensor(k_smallest_eigen), G.number_of_edges())
+            same_size_proj, edge_proj = get_proj(torch.FloatTensor(eigvals), torch.FloatTensor(k_smallest_eigen).T, G.number_of_edges())
+            layer = IGNBasisInv(same_size_proj, 5)
+
+            edge_layers = []
+            for i, k in enumerate(same_size_proj.keys()):
+                res = layer(edge_proj[i], k).T.squeeze(-1)
+                edge_layers.append(res)
+            edge_embeddings = edge_layers[0]
+            for i in range(1, len(edge_layers)):
+                edge_embeddings = torch.cat((edge_embeddings, edge_layers[i]), dim=1)
+
+            offset = torch.full((edge_embeddings.shape[0], 5 - edge_embeddings.shape[1]), 1)
+            edge_embeddings = edge_embeddings.to('cpu')
+            edge_embeddings = torch.cat((edge_embeddings, offset), dim=1)
+            self.edge_pos_enc.append(edge_embeddings)
 
             eigenvectors = np.array(process_eigen(k_smallest_eigen))
             eigenvectors = torch.from_numpy(eigenvectors)
@@ -245,17 +272,41 @@ class ZINC_Dataset(DGLDataset):
             g = dgl.graph((src, dst), num_nodes=num_nodes)
             g.ndata['atom_type'] = atom_type
             g.edata['bond_type'] = bond_types.float()
-            g.edata['hodge_eig'] = eigenvectors
+            g.edata['hodge_eig'] = edge_embeddings
 
             node_eigval, node_eigvect = positional_encoding(g, 3)
-            g.ndata['eig'] = node_eigvect
-            g.ndata['pos_enc'] = node_eigvect
 
-            node_proj = get_proj(torch.FloatTensor(node_eigval), torch.FloatTensor(node_eigvect), G.number_of_nodes())
-            g.ndata['proj'] = node_proj
+            same_size_proj_node, node_proj = get_proj(node_eigval, node_eigvect, G.number_of_nodes())
+            layer_node = IGNBasisInv(same_size_proj_node, 3)
+
+            node_layers = []
+
+            for i, k in enumerate(same_size_proj_node.keys()):
+                res = layer_node(node_proj[i], k).T.squeeze(-1)
+                node_layers.append(res)
+            node_embeddings = node_layers[0]
+            for i in range(1, len(node_layers)):
+                node_embeddings = torch.cat((node_embeddings, node_layers[i]), dim=1)
+
+            node_embeddings = node_embeddings.to('cpu')
+            self.node_pos_enc.append(node_embeddings)
+
+            # offset = torch.full((node_embeddings.shape[0], 5 - node_embeddings.shape[1]), 1).to('cuda')
+            # node_embeddings = torch.cat((node_embeddings, offset), dim=1)
+            # print(node_embeddings.shape)
+
+            g.ndata['eig'] = node_embeddings
+            g.ndata['pos_enc'] = node_embeddings
+
             self.graphs.append(g)
             self.logP_SA_cycle_normalized.append(logP_SA_cycle_normalized)
             self.G.append(G)
+        
+        with open("edge_pos_enc.pickle", "wb") as f:
+            pickle.dump(self.edge_pos_enc, f)
+
+        with open("node_pos_enc.pickle", "wb") as f:
+            pickle.dump(self.node_pos_enc, f)
 
     def __getitem__(self, i):
         return self.graphs[i], self.logP_SA_cycle_normalized[i], self.G[i], self.mask

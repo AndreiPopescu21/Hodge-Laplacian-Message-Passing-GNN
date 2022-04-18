@@ -36,8 +36,11 @@ class IGNBasisInv(nn.Module):
 
 
     def forward(self, proj, mult):
+        self.encs = self.encs.to('cuda')
+        proj = proj.to('cuda')
         enc_idx = self.mult_to_idx[mult]
         x = self.encs[enc_idx](proj)
+        torch.cuda.empty_cache()
         return x
 
 class IGNShared(nn.Module):

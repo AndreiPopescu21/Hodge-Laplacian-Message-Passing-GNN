@@ -36,6 +36,7 @@ class IGN2to1(nn.Module):
         x = F.relu(self.fc1(x))
         x = self.fc2(x)
         x = x.transpose(2,1) # b x d x n
+        torch.cuda.empty_cache()
         return x
 
 
