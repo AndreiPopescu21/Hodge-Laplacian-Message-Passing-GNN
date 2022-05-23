@@ -12,7 +12,10 @@ from .signbasisnet import IGNBasisInv
 from .models import MLP, EqDeepSetsEncoder
 from tqdm import tqdm
 
+from memory_profiler import profile
+
 DEBUGGING_MODE = True
+device = 'cuda:0'
 
 def load_data():
     if DEBUGGING_MODE == False:
@@ -27,7 +30,9 @@ def load_data():
         val = pickle.load(f)
 
     if DEBUGGING_MODE:
-        train = train[:10]
+        p = 1
+        debuglen = int(len(train)*p)
+        train = train[:debuglen]
         test = test[:10]
         val = val[:10]
 
@@ -221,10 +226,12 @@ def get_proj(eigvals, eigvecs, N):
 def IGN():
     pass
 
+# @profile
 class ZINC_Dataset(DGLDataset):
     def __init__(self):
         super().__init__(name='ZINC')
 
+    @profile
     def process(self):
         dataset, self.mask = load_data()
         self.graphs = []
@@ -253,8 +260,8 @@ class ZINC_Dataset(DGLDataset):
             for i in range(1, len(edge_layers)):
                 edge_embeddings = torch.cat((edge_embeddings, edge_layers[i]), dim=1)
 
-            offset = torch.full((edge_embeddings.shape[0], 5 - edge_embeddings.shape[1]), 1)
-            edge_embeddings = edge_embeddings.to('cpu')
+            offset = torch.full((edge_embeddings.shape[0], 5 - edge_embeddings.shape[1]), 1).to(device)
+            edge_embeddings = edge_embeddings.to(device)
             edge_embeddings = torch.cat((edge_embeddings, offset), dim=1)
             self.edge_pos_enc.append(edge_embeddings)
 
@@ -269,10 +276,10 @@ class ZINC_Dataset(DGLDataset):
             dst = np.array([nodes[1] for nodes in G.graph['tuple_to_edge']])
             num_nodes = G.number_of_nodes()
 
-            g = dgl.graph((src, dst), num_nodes=num_nodes)
-            g.ndata['atom_type'] = atom_type
-            g.edata['bond_type'] = bond_types.float()
-            g.edata['hodge_eig'] = edge_embeddings
+            g = dgl.graph((src, dst), num_nodes=num_nodes).to(device)
+            g.ndata['atom_type'] = atom_type.to(device)
+            g.edata['bond_type'] = bond_types.float().to(device)
+            g.edata['hodge_eig'] = edge_embeddings.to(device)
 
             node_eigval, node_eigvect = positional_encoding(g, 3)
 
@@ -284,20 +291,24 @@ class ZINC_Dataset(DGLDataset):
             for i, k in enumerate(same_size_proj_node.keys()):
                 res = layer_node(node_proj[i], k).T.squeeze(-1)
                 node_layers.append(res)
+                # print(res)
+
             node_embeddings = node_layers[0]
             for i in range(1, len(node_layers)):
                 node_embeddings = torch.cat((node_embeddings, node_layers[i]), dim=1)
+            # print(node_embeddings)
 
-            node_embeddings = node_embeddings.to('cpu')
+            node_embeddings = node_embeddings.to(device)
             self.node_pos_enc.append(node_embeddings)
 
-            # offset = torch.full((node_embeddings.shape[0], 5 - node_embeddings.shape[1]), 1).to('cuda')
+            # offset = torch.full((node_embeddings.shape[0], 5 - node_embeddings.shape[1]), 1).to(device)
             # node_embeddings = torch.cat((node_embeddings, offset), dim=1)
             # print(node_embeddings.shape)
-
+            
             g.ndata['eig'] = node_embeddings
             g.ndata['pos_enc'] = node_embeddings
-
+            # print(g.ndata['pos_enc'])
+            
             self.graphs.append(g)
             self.logP_SA_cycle_normalized.append(logP_SA_cycle_normalized)
             self.G.append(G)
