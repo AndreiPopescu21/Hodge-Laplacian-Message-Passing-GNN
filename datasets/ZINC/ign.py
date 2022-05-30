@@ -125,6 +125,7 @@ class layer_2_to_1(nn.Module):
 
         # bias
         output = output + self.bias
+        torch.cuda.empty_cache()
 
         return output
 
@@ -168,6 +169,7 @@ class layer_1_to_2(nn.Module):
 
         # bias
         output = output + self.bias
+        torch.cuda.empty_cache()
 
         return output
 
