@@ -14,7 +14,7 @@ from tqdm import tqdm
 
 from memory_profiler import profile
 
-DEBUGGING_MODE = True
+DEBUGGING_MODE = False
 device = 'cuda:0'
 
 def load_data():
@@ -30,7 +30,7 @@ def load_data():
         val = pickle.load(f)
 
     if DEBUGGING_MODE:
-        p = 1
+        p = 0.01
         debuglen = int(len(train)*p)
         train = train[:debuglen]
         test = test[:10]
