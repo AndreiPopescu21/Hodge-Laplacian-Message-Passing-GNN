@@ -35,7 +35,7 @@
       "towers": 5,
       "divide_input_first": false,
       "divide_input_last": true,
-      "edge_dim": 1,
+      "edge_dim": 5,
       "pretrans_layers" : 1,
       "posttrans_layers" : 1
     }

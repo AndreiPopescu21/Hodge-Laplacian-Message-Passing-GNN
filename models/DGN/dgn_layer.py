@@ -9,6 +9,7 @@ from .layers import MLP, FCLayer
 from .scalers import SCALERS
 from dgl.nn.pytorch.glob import mean_nodes, sum_nodes
 
+
 class VirtualNode(nn.Module):
     def __init__(self, dim, dropout, batch_norm=False, bias=True, residual=True, vn_type='mean'):
         super().__init__()
@@ -100,6 +101,10 @@ class DGNLayerComplex(nn.Module):
         return self.posttrans(nodes.data['h'])
 
     def forward(self, g, h, e, snorm_n):
+
+        h_in = h
+        g.ndata['h'] = h
+
         if self.edge_features:  # add the edges information only if edge_features = True
             g.edata['ef'] = e
 
@@ -171,9 +176,6 @@ class DGNLayerSimple(nn.Module):
         return self.posttrans(nodes.data['h'])
 
     def forward(self, g, h, e, snorm_n):
-        h_in = h
-        g.ndata['h'] = h
-
         h_in = h
         g.ndata['h'] = h.float()
         g.edata['e'] = e.float()

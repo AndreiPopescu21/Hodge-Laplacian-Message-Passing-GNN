@@ -1,4 +1,4 @@
-import pickle, os
+import pickle
 import networkx as nx
 import numpy as np
 import matplotlib.pyplot as plt
@@ -8,29 +8,19 @@ from scipy import sparse as sp
 
 import dgl, torch
 from dgl.data import DGLDataset
-from .signbasisnet import IGNBasisInv
-from .models import MLP, EqDeepSetsEncoder
-from tqdm import tqdm
 
 DEBUGGING_MODE = False
-device = 'cuda:0'
 
 def load_data():
-    if DEBUGGING_MODE == False:
-        with open(str(Path(__file__).parent.absolute()) + '/dataset/train.pickle', 'rb') as f:
-            train = pickle.load(f)
-    else:
-        with open(str(Path(__file__).parent.absolute()) + '/dataset/val.pickle', 'rb') as f:
-            train = pickle.load(f)
+    with open(str(Path(__file__).parent.absolute()) + '/dataset/train.pickle', 'rb') as f:
+        train = pickle.load(f)
     with open(str(Path(__file__).parent.absolute()) + '/dataset/test.pickle', 'rb') as f:
         test = pickle.load(f)
     with open(str(Path(__file__).parent.absolute()) + '/dataset/val.pickle', 'rb') as f:
         val = pickle.load(f)
 
     if DEBUGGING_MODE:
-        p = 0.01
-        debuglen = int(len(train)*p)
-        train = train[:debuglen]
+        train = train[:10]
         test = test[:10]
         val = val[:10]
 
@@ -161,7 +151,7 @@ def get_smallest_k_eigenvectors(L1, k):
         v = eigenvectors[:, maxcol]
         k_smallest_eigen.append(np.abs(v))
     
-    return sorted_eigenvalues[:k], k_smallest_eigen
+    return k_smallest_eigen
 
 def process_eigen(k_smallest_eigen):
     k = len(k_smallest_eigen)
@@ -174,106 +164,34 @@ def process_eigen(k_smallest_eigen):
 
 def positional_encoding(g, pos_enc_dim):
     A = g.adjacency_matrix_scipy(return_edge_ids=False).astype(float)
-    a = nx.from_numpy_matrix(A.todense())
-    L = nx.laplacian_matrix(a).toarray()
+    N = sp.diags(dgl.backend.asnumpy(g.in_degrees()).clip(1) ** -0.5, dtype=float)
+    L = sp.eye(g.number_of_nodes()) - N * A * N
 
-    EigVal, EigVec = np.linalg.eig(L)
+    EigVal, EigVec = np.linalg.eig(L.toarray())
     idx = EigVal.argsort()  # increasing order
     EigVal, EigVec = EigVal[idx], np.real(EigVec[:, idx])
-    # g.ndata['pos_enc'] = torch.from_numpy(EigVec[:, 1:pos_enc_dim + 1]).float()
+    g.ndata['pos_enc'] = torch.from_numpy(EigVec[:, 1:pos_enc_dim + 1]).float()
 
-    return torch.from_numpy(EigVal[1:pos_enc_dim+1]).float(), torch.from_numpy(EigVec[:, 1:pos_enc_dim + 1]).float()
-    # # eigenvalues, eigenvectors = eigh(L)
-    # # sorted_eigenvalues = np.sort(eigenvalues)
-    # # print(eigenvalues)
-    # # k=3
-    
-    # # k_smallest_eigen = []
-    # # for i in range(k):
-    # #     maxcol = list(eigenvalues).index(sorted_eigenvalues[i])
-    # #     v = eigenvectors[:, maxcol]
-    # #     k_smallest_eigen.append(np.abs(v))
-    
-    # # return torch.FloatTensor(sorted_eigenvalues[:k]), torch.FloatTensor(k_smallest_eigen)
-    # return None, None
-
-def around(x, decimals=5):
-    """ round to a number of decimal places """
-    return torch.round(x * 10**decimals) / (10**decimals)
-
-def get_proj(eigvals, eigvecs, N):
-    rounded_vals = around(eigvals, decimals=5)
-    uniq_vals, inv_inds, counts = rounded_vals.unique(return_inverse=True, return_counts=True)
-    uniq_mults = counts.unique()
-
-    sections = torch.cumsum(counts, 0)
-    eigenspaces = torch.tensor_split(eigvecs, sections.cpu(), dim=1)[:-1]
-    projectors = [V @ V.T for V in eigenspaces]
-
-    projectors = [P.reshape(1,1,N,N) for P in projectors]
-
-    same_size_projs = {mult.item(): [] for mult in uniq_mults}
-    for i in range(len(projectors)):
-        mult = counts[i].item()
-        same_size_projs[mult].append(projectors[i])
-    for mult, projs in same_size_projs.items():
-        same_size_projs[mult] = torch.cat(projs, dim=0)
-
-    return same_size_projs, torch.FloatTensor([t.numpy() for t in projectors])
-
-def IGN():
-    pass
+    return g
 
 class ZINC_Dataset(DGLDataset):
     def __init__(self):
         super().__init__(name='ZINC')
 
-    @profile
     def process(self):
-        edge_pos_enc_file = str(Path(__file__).parent.absolute()) + '/dataset/edge_pos_enc.pickle'
-        node_pos_enc_file = str(Path(__file__).parent.absolute()) + '/dataset/node_pos_enc.pickle'
-        files_exist = False
-        if os.path.exists(edge_pos_enc_file) and os.path.exists(node_pos_enc_file):
-            files_exist = True
-            with open(edge_pos_enc_file) as f:
-                edge_pos_enc = pickle.load(f)
-            with open(node_pos_enc_file) as f:
-                node_pos_enc = pickle.load(f)
-
         dataset, self.mask = load_data()
         self.graphs = []
         self.logP_SA_cycle_normalized = []
         self.G = []
-        self.eigenspaces = []
-        self.node_pos_enc = []
-        self.edge_pos_enc = []
 
-        for data in tqdm(dataset):
+        for data in dataset:
             A = data['bond_type']
             G = construct_graph_from_adjacency(A)
 
             B1, B2 = extract_boundary_matrices(G)
             L1 = get_hodge_laplacian(B1, B2)
-            eigvals, k_smallest_eigen = get_smallest_k_eigenvectors(L1, 5)
 
-            if not files_exist:
-                same_size_proj, edge_proj = get_proj(torch.FloatTensor(eigvals), torch.FloatTensor(k_smallest_eigen).T, G.number_of_edges())
-                layer = IGNBasisInv(same_size_proj, 5)
-
-                edge_layers = []
-                for i, k in enumerate(same_size_proj.keys()):
-                    res = layer(edge_proj[i], k).T.squeeze(-1)
-                    edge_layers.append(res)
-                edge_embeddings = edge_layers[0]
-                for i in range(1, len(edge_layers)):
-                    edge_embeddings = torch.cat((edge_embeddings, edge_layers[i]), dim=1)
-
-                offset = torch.full((edge_embeddings.shape[0], 5 - edge_embeddings.shape[1]), 1).to(device)
-                edge_embeddings = edge_embeddings.to(device)
-                edge_embeddings = torch.cat((edge_embeddings, offset), dim=1)
-                # self.edge_pos_enc.append(edge_embeddings)
-                edge_pos_enc = edge_embeddings
-                del layer, edge_layers, same_size_proj, edge_proj, offset
+            k_smallest_eigen = get_smallest_k_eigenvectors(L1, 5)
 
             eigenvectors = np.array(process_eigen(k_smallest_eigen))
             eigenvectors = torch.from_numpy(eigenvectors)
@@ -286,52 +204,17 @@ class ZINC_Dataset(DGLDataset):
             dst = np.array([nodes[1] for nodes in G.graph['tuple_to_edge']])
             num_nodes = G.number_of_nodes()
 
-            g = dgl.graph((src, dst), num_nodes=num_nodes).to(device)
-            g.ndata['atom_type'] = atom_type.to(device)
-            g.edata['bond_type'] = bond_types.float().to(device)
-            g.edata['hodge_eig'] = edge_pos_enc.to(device)
+            g = dgl.graph((src, dst), num_nodes=num_nodes)
+            g.ndata['atom_type'] = atom_type
+            g.edata['bond_type'] = bond_types.float()
+            g.edata['hodge_eig'] = eigenvectors
 
-            node_eigval, node_eigvect = positional_encoding(g, 3)
+            g = positional_encoding(g, 3)
+            g.ndata['eig'] = g.ndata['pos_enc']
 
-            if not files_exist:
-                same_size_proj_node, node_proj = get_proj(node_eigval, node_eigvect, G.number_of_nodes())
-                layer_node = IGNBasisInv(same_size_proj_node, 3)
-
-                node_layers = []
-
-                for i, k in enumerate(same_size_proj_node.keys()):
-                    res = layer_node(node_proj[i], k).T.squeeze(-1)
-                    node_layers.append(res)
-                    # print(res)
-
-                node_embeddings = node_layers[0]
-                for i in range(1, len(node_layers)):
-                    node_embeddings = torch.cat((node_embeddings, node_layers[i]), dim=1)
-                # print(node_embeddings)
-                del layer_node, node_layers, node_proj, same_size_proj_node
-
-                node_embeddings = node_embeddings.to(device)
-                # self.node_pos_enc.append(node_embeddings)
-                node_pos_enc = node_embeddings
-
-            # offset = torch.full((node_embeddings.shape[0], 5 - node_embeddings.shape[1]), 1).to(device)
-            # node_embeddings = torch.cat((node_embeddings, offset), dim=1)
-            # print(node_embeddings.shape)
-            
-            g.ndata['eig'] = node_pos_enc
-            g.ndata['pos_enc'] = node_pos_enc
-            # print(g.ndata['pos_enc'])
-            
             self.graphs.append(g)
             self.logP_SA_cycle_normalized.append(logP_SA_cycle_normalized)
             self.G.append(G)
-    
-            if not files_exist:
-                with open("edge_pos_enc.pickle", "wb") as f:
-                    pickle.dump(edge_pos_enc, f)
-
-                with open("node_pos_enc.pickle", "wb") as f:
-                    pickle.dump(node_pos_enc, f)
 
     def __getitem__(self, i):
         return self.graphs[i], self.logP_SA_cycle_normalized[i], self.G[i], self.mask
